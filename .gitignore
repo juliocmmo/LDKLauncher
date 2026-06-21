@@ -1,0 +1,24 @@
+﻿# Credenciais — NUNCA commitar
+shared/credentials.py
+gen_credentials.py
+
+# Build / distribuição
+dist/
+build/
+*.spec.bak
+
+# Logs
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# IDE / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
