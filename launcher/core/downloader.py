@@ -208,5 +208,8 @@ def validar_arquivo(caminho_arquivo: str, hash_esperado: str, callback_progresso
 
 def _limpar_arquivo_parcial(caminho: str) -> None:
     if os.path.exists(caminho):
-        os.remove(caminho)
-        logger.info(f"Arquivo parcial removido: {caminho}")
+        try:
+            os.remove(caminho)
+            logger.info(f"Arquivo parcial removido: {caminho}")
+        except PermissionError:
+            logger.warning(f"Arquivo em uso, será removido depois: {caminho}")

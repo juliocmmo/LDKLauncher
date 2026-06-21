@@ -389,6 +389,22 @@ class GameCard(QWidget):
         if self._worker is not None:
             return
 
+        from launcher.ui.install_dialog import InstallDialog
+        dlg = InstallDialog(
+            parent=self,
+            nome_jogo=self.nome,
+            install_path=self._dados.get("install_path", self.nome),
+            tamanho_str=_fmt_tamanho(self._dados.get("size_bytes", 0)),
+        )
+        dlg.exec()
+
+        if not dlg.confirmado:
+            return
+
+        # Salva a pasta escolhida nos dados para o worker usar
+        self._dados["pasta_instalacao"]  = dlg.pasta_escolhida
+        self._dados["excluir_antivirus"] = dlg.excluir_antivirus
+
         self._worker = DownloadWorker(self._dados)
         self._worker.progresso.connect(self._on_progresso)
         self._worker.concluido.connect(self._on_concluido)
@@ -476,9 +492,24 @@ class GameCard(QWidget):
 
     def _on_concluido(self, nome: str):
         self._worker = None
-        # Atualizar status local para "atualizado"
+        versao = self._dados.get("version_remote", "")
         self._dados["status"]        = "atualizado"
-        self._dados["version_local"] = self._dados.get("version_remote", "")
+        self._dados["version_local"] = versao
+
+        # Persiste no version_local.json
+        try:
+            from launcher.core.version_checker import carregar_versao_local, salvar_versao_local
+            local = carregar_versao_local()
+            if nome not in local:
+                local[nome] = {}
+            local[nome]["version"] = versao
+            # Preserva install_dir e last_played se já existirem
+            if self._dados.get("pasta_instalacao"):
+                local[nome]["install_dir"] = self._dados["pasta_instalacao"]
+            salvar_versao_local(local)
+        except Exception as e:
+            logger.warning(f"[{nome}] Não foi possível salvar versão local: {e}")
+
         self._atualizar_estado()
         self.download_concluido.emit(nome)
         logger.info(f"[{nome}] Concluído.")

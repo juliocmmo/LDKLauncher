@@ -134,8 +134,7 @@ class MainWindow(QMainWindow):
         self._sig.atualizar_texto.connect(self._loading.set_texto)
         self._sig.ui_pronta.connect(self._popular_ui)
         self._sig.erro_conexao.connect(self._loading.set_texto)
-
-        threading.Thread(target=self._inicializar, daemon=True).start()
+        # NÃO chama _inicializar aqui — quem chama é o main.py
 
     # ------------------------------------------------------------------
     # Inicialização

@@ -52,7 +52,8 @@ class DownloadWorker(QThread):
         self._temp_dir    = Path(get_temp_dir())
 
         versao = dados_jogo.get("version_remote", "")
-        self._zip_destino = self._temp_dir / f"{self._nome}_{versao}.zip"
+        self._zip_nome    = f"{self._nome}_{versao}.zip"
+        self._zip_destino = self._temp_dir / self._zip_nome
 
     # ------------------------------------------------------------------
     # API pública
@@ -103,18 +104,31 @@ class DownloadWorker(QThread):
     # ------------------------------------------------------------------
 
     def _fase_download(self):
-        def cb(baixado, total, velocidade=0, eta=0):
+        tamanho = self._dados.get("size_bytes", 0)
+
+        def cb(baixado, total):
             if self._cancel_event.is_set():
                 return
             pct = int(baixado / total * 100) if total else 0
-            vel = _fmt_velocidade(velocidade)
-            eta_s = _fmt_tempo(eta)
-            self.progresso.emit(pct, "download", f"{vel}  •  {eta_s} restantes")
+            baixado_str = f"{baixado / 1024**2:.0f} MB"
+            total_str   = f"{total   / 1024**2:.0f} MB"
+            self.progresso.emit(pct, "download", f"{baixado_str} / {total_str}")
 
-        # baixar_arquivo pode ter assinatura variada — adaptar conforme o real
+        resultado = baixar_arquivo(
+            url=self._url,
+            nome_arquivo=self._zip_nome,
+            tamanho_total=tamanho,
+            callback_progresso=cb,
+            cancel_event=self._cancel_event,
+        )
+
+        if resultado is None:
+            raise RuntimeError("Download falhou. Verifique os logs para mais detalhes.")
+
         baixar_arquivo(
             url=self._url,
-            destino=str(self._zip_destino),
+            nome_arquivo=self._zip_destino.name,
+            tamanho_total=tamanho,
             callback_progresso=cb,
             cancel_event=self._cancel_event,
         )
