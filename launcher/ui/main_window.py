@@ -1,3 +1,13 @@
+"""
+launcher/ui/main_window.py — Etapa 3 (reescrita completa compatível com os dados reais)
+
+Mudanças em relação à versão anterior:
+  - Sidebar emite jogo_selecionado(nome: str), não item_selecionado(indice: int)
+  - _cards é dict[str, GameCard] (chave = nome), não list
+  - Conecta sinais de download do GameCard ↔ Sidebar
+  - Suporte a auto-refresh (slot _on_refresh_silencioso)
+"""
+
 import threading
 
 from PySide6.QtWidgets import (
@@ -5,13 +15,12 @@ from PySide6.QtWidgets import (
     QPushButton, QFrame, QStackedWidget,
 )
 from PySide6.QtCore import Qt, Signal, QObject
-from PySide6.QtGui import QPalette, QColor
+from PySide6.QtGui  import QPalette, QColor
 
 from launcher.ui.theme import *
 
 
 class _Sinalizador(QObject):
-    """Objeto auxiliar para emitir signals de uma thread de fundo."""
     atualizar_texto  = Signal(str)
     ui_pronta        = Signal(list)
     erro_conexao     = Signal(str)
@@ -83,7 +92,6 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(root)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
         layout.addWidget(_TitleBar(root))
 
         corpo = QWidget()
@@ -92,8 +100,9 @@ class MainWindow(QMainWindow):
         corpo_layout.setSpacing(0)
 
         from launcher.ui.sidebar import Sidebar
-        self.sidebar = Sidebar()
-        self.sidebar.item_selecionado.connect(self._selecionar_card)
+        self._sidebar = Sidebar()
+        # NOVO: sinal emite nome do jogo (str), não índice (int)
+        self._sidebar.jogo_selecionado.connect(self._selecionar_card)
 
         borda = QFrame()
         borda.setFixedWidth(1)
@@ -112,15 +121,15 @@ class MainWindow(QMainWindow):
         self._painel_layout.setSpacing(0)
         self._stack.addWidget(self._painel)    # índice 1
 
-        corpo_layout.addWidget(self.sidebar)
+        corpo_layout.addWidget(self._sidebar)
         corpo_layout.addWidget(borda)
         corpo_layout.addWidget(self._stack, 1)
-
         layout.addWidget(corpo, 1)
 
-        self._cards = []
+        # NOVO: _cards é dict[nome → GameCard]
+        self._cards: dict[str, "GameCard"] = {}
+        self._jogos_remotos: list[dict] = []
 
-        # Sinalizador para comunicação entre thread e UI
         self._sig = _Sinalizador()
         self._sig.atualizar_texto.connect(self._loading.set_texto)
         self._sig.ui_pronta.connect(self._popular_ui)
@@ -128,42 +137,99 @@ class MainWindow(QMainWindow):
 
         threading.Thread(target=self._inicializar, daemon=True).start()
 
+    # ------------------------------------------------------------------
+    # Inicialização
+    # ------------------------------------------------------------------
+
     def _inicializar(self):
         from launcher.core.version_checker import (
             buscar_versao_remota, carregar_versao_local, verificar_status_modpacks
         )
-
         self._sig.atualizar_texto.emit("Buscando atualizações...")
-
         remoto = buscar_versao_remota()
         local  = carregar_versao_local()
-
         if remoto is None:
             self._sig.erro_conexao.emit("Sem conexão. Verifique sua internet.")
             return
-
         modpacks = verificar_status_modpacks(remoto, local)
         self._sig.ui_pronta.emit(modpacks)
 
     def _popular_ui(self, modpacks: list):
         from launcher.ui.game_card import GameCard
 
-        self.sidebar.popular(modpacks)
+        self._jogos_remotos = modpacks
+        self._sidebar.popular(modpacks)
 
-        for mp in modpacks:
-            card = GameCard(mp)
+        for dados in modpacks:
+            nome = dados["name"]
+            card = GameCard(dados)
             card.hide()
             self._painel_layout.addWidget(card)
-            self._cards.append(card)
+            self._cards[nome] = card
 
-        if self._cards:
-            self._cards[0].show()
+            # Conectar sinais de download
+            card.download_iniciado.connect(self._on_download_iniciado)
+            card.download_concluido.connect(self._on_download_concluido)
+            card.download_cancelado.connect(self._on_download_cancelado)
+            card.progresso_download.connect(self._on_progresso_download)
+
+        # Mostrar o primeiro card (ou o primeiro da aba biblioteca)
+        primeiro = next(
+            (d["name"] for d in modpacks if d.get("status") != "nao_instalado"),
+            modpacks[0]["name"] if modpacks else None
+        )
+        if primeiro:
+            self._selecionar_card(primeiro)
 
         self._stack.setCurrentIndex(1)
 
-    def _selecionar_card(self, indice: int):
-        for i, card in enumerate(self._cards):
-            if i == indice:
-                card.show()
-            else:
-                card.hide()
+    # ------------------------------------------------------------------
+    # Navegação
+    # ------------------------------------------------------------------
+
+    def _selecionar_card(self, nome: str):
+        for n, card in self._cards.items():
+            card.setVisible(n == nome)
+        self._sidebar.selecionar(nome)
+
+    # ------------------------------------------------------------------
+    # Coordenação download ↔ sidebar
+    # ------------------------------------------------------------------
+
+    def _on_download_iniciado(self, nome: str):
+        self._sidebar.marcar_baixando(nome)
+        # Desabilitar botão principal dos outros cards
+        for n, card in self._cards.items():
+            if n != nome:
+                card._btn_principal.setEnabled(False)
+
+    def _on_download_concluido(self, nome: str):
+        self._sidebar.desmarcar_baixando(nome)
+        self._sidebar.atualizar_status_jogo(nome, "atualizado")
+        for card in self._cards.values():
+            card._btn_principal.setEnabled(True)
+        # Repopular sidebar (jogo sai da Loja e vai para Biblioteca)
+        self._sidebar.popular(self._jogos_remotos)
+
+    def _on_download_cancelado(self, nome: str):
+        self._sidebar.desmarcar_baixando(nome)
+        for card in self._cards.values():
+            card._btn_principal.setEnabled(True)
+
+    def _on_progresso_download(self, nome: str, pct: int, fase: str, detalhe: str):
+        self._sidebar.atualizar_progresso(nome, pct, detalhe)
+
+    # ------------------------------------------------------------------
+    # Auto-refresh (chamado pelo timer de 5 min, quando implementado)
+    # ------------------------------------------------------------------
+
+    def _on_refresh_silencioso(self, jogos: list[dict]):
+        """Atualiza dados sem interromper downloads em andamento."""
+        self._jogos_remotos = jogos
+        self._sidebar.popular(jogos)
+        for dados in jogos:
+            nome = dados["name"]
+            if nome in self._cards:
+                card = self._cards[nome]
+                if card._worker is None:
+                    card.atualizar_dados(dados)

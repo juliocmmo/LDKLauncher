@@ -98,6 +98,7 @@ def verificar_status_modpacks(remoto: dict, local: dict) -> list:
             "install_path":   modpack.get("install_path", ""),
             "executable":     modpack.get("executable", ""),
             "instance_name":  modpack.get("instance_name", ""),
+            "last_played": local.get(nome, {}).get("last_played", ""),
         })
 
     return resultado
