@@ -1,4 +1,5 @@
 ﻿# Credenciais — NUNCA commitar
+launcher/core/credentials.py
 shared/credentials.py
 gen_credentials.py
 
