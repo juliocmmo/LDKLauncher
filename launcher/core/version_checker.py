@@ -1,8 +1,8 @@
 import json
 import os
 import requests
-from config.settings import REMOTE_VERSION_URL, LOCAL_VERSION_FILE, CONNECTION_TIMEOUT
-from config.logger import get_logger
+from launcher.config.settings import REMOTE_VERSION_URL, LOCAL_VERSION_FILE, CONNECTION_TIMEOUT
+from launcher.config.logger import get_logger
 
 logger = get_logger()
 

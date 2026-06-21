@@ -1,8 +1,8 @@
 import os
 import subprocess
 import psutil
-from config.settings import get_install_dir, get_prism_dir
-from config.logger import get_logger
+from launcher.config.settings import get_install_dir, get_prism_dir
+from launcher.config.logger import get_logger
 
 logger = get_logger()
 

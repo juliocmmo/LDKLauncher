@@ -4,8 +4,8 @@ import json
 import base64
 import threading
 import requests
-from config.settings import get_temp_dir, DOWNLOAD_TIMEOUT
-from config.logger import get_logger
+from launcher.config.settings import get_temp_dir, DOWNLOAD_TIMEOUT
+from launcher.config.logger import get_logger
 
 logger = get_logger()
 

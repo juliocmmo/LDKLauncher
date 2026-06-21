@@ -4,8 +4,8 @@ import zipfile
 import shutil
 import requests
 import subprocess
-from config.settings import LAUNCHER_VERSION, CONNECTION_TIMEOUT
-from config.logger import get_logger
+from launcher.config.settings import LAUNCHER_VERSION, CONNECTION_TIMEOUT
+from launcher.config.logger import get_logger
 
 logger = get_logger()
 

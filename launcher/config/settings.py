@@ -38,7 +38,7 @@ def obter_install_dir() -> str:
 def obter_install_dir_jogo(nome_jogo: str) -> str:
     """Retorna a pasta de instalação customizada de um jogo específico,
     ou a pasta padrão se não houver customização."""
-    from core.version_checker import carregar_versao_local
+    from launcher.core.version_checker import carregar_versao_local
     local = carregar_versao_local()
     custom = local.get(nome_jogo, {}).get("install_dir")
     return custom if custom else obter_install_dir()

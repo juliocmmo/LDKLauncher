@@ -3,7 +3,7 @@ Gerencia exclusões do Windows Defender.
 Como a leitura das exclusões requer admin, o estado é salvo localmente no config.json.
 """
 import subprocess
-from config.logger import get_logger
+from launcher.config.logger import get_logger
 
 logger = get_logger()
 

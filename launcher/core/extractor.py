@@ -3,8 +3,8 @@ import sys
 import zipfile
 import shutil
 import subprocess
-from config.settings import get_temp_dir, get_prism_instances_dir
-from config.logger import get_logger
+from launcher.config.settings import get_temp_dir, get_prism_instances_dir
+from launcher.config.logger import get_logger
 
 logger = get_logger()
 

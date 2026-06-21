@@ -225,7 +225,7 @@ class GameCard(QWidget):
         nome = self.modpack["name"]
         pasta = obter_install_dir_jogo(nome)
         exe = self.modpack.get("executable", "")
-        sucesso = iniciar_jogo(pasta, exe, self.modpack)
+        sucesso = iniciar_jogo(pasta, exe)
         if sucesso:
             self.botao_fechar_jogo.show()
         else:
