@@ -2,6 +2,15 @@
 launcher/core/download_worker.py
 QThread que encapsula o pipeline completo: download → hash → extração.
 Adaptado para as funções reais do projeto (extractor.py, version_checker.py).
+
+Etapa 5 — alterações:
+  - Corrigido bug: _fase_download chamava baixar_arquivo duas vezes;
+    agora passa str(self._zip_destino) como nome_arquivo direto.
+  - _fase_extracao: callback lança InterruptedError ao detectar cancel_event,
+    interrompendo o loop de extração imediatamente.
+  - _limpar_zip renomeada para _limpar_residuos(parcial=False); quando
+    parcial=True remove também a pasta parcialmente extraída.
+  - run(): InterruptedError capturada separadamente para não tratar como erro.
 """
 
 import threading
@@ -72,7 +81,7 @@ class DownloadWorker(QThread):
 
             self._fase_download()
             if self._cancel_event.is_set():
-                self._limpar_zip()
+                self._limpar_residuos()
                 self.cancelado.emit(self._nome)
                 return
 
@@ -81,22 +90,26 @@ class DownloadWorker(QThread):
                 if not ok:
                     return   # erro ou cancelado — já emitido dentro
                 if self._cancel_event.is_set():
-                    self._limpar_zip()
+                    self._limpar_residuos()
                     self.cancelado.emit(self._nome)
                     return
 
             self._fase_extracao()
             if self._cancel_event.is_set():
-                self._limpar_zip()
+                self._limpar_residuos(parcial=True)
                 self.cancelado.emit(self._nome)
                 return
 
-            self._limpar_zip()
+            self._limpar_residuos()
             self.concluido.emit(self._nome)
 
+        except InterruptedError:
+            # Cancelamento durante extração (callback lançou InterruptedError)
+            self._limpar_residuos(parcial=True)
+            self.cancelado.emit(self._nome)
         except Exception as exc:
             logger.error(f"[{self._nome}] Erro no worker: {exc}", exc_info=True)
-            self._limpar_zip()
+            self._limpar_residuos()
             self.erro.emit(self._nome, str(exc))
 
     # ------------------------------------------------------------------
@@ -114,24 +127,19 @@ class DownloadWorker(QThread):
             total_str   = f"{total   / 1024**2:.0f} MB"
             self.progresso.emit(pct, "download", f"{baixado_str} / {total_str}")
 
+        # CORRIGIDO: uma única chamada, passando o caminho completo do destino
         resultado = baixar_arquivo(
             url=self._url,
-            nome_arquivo=self._zip_nome,
+            nome_arquivo=str(self._zip_destino),
             tamanho_total=tamanho,
             callback_progresso=cb,
             cancel_event=self._cancel_event,
         )
 
         if resultado is None:
+            if self._cancel_event.is_set():
+                return   # cancelado pelo usuário — run() vai detectar e emitir cancelado
             raise RuntimeError("Download falhou. Verifique os logs para mais detalhes.")
-
-        baixar_arquivo(
-            url=self._url,
-            nome_arquivo=self._zip_destino.name,
-            tamanho_total=tamanho,
-            callback_progresso=cb,
-            cancel_event=self._cancel_event,
-        )
 
     def _fase_hash(self) -> bool:
         self.progresso.emit(0, "hash", "Verificando integridade…")
@@ -148,14 +156,14 @@ class DownloadWorker(QThread):
         )
 
         if self._cancel_event.is_set():
-            self._limpar_zip()
+            self._limpar_residuos()
             self.cancelado.emit(self._nome)
             return False
 
         if hash_real != self._hash_esp:
             msg = f"Hash inválido.\nEsperado: {self._hash_esp}\nObtido:   {hash_real}"
             logger.error(f"[{self._nome}] {msg}")
-            self._limpar_zip()
+            self._limpar_residuos()
             self.erro.emit(self._nome, msg)
             return False
 
@@ -165,8 +173,9 @@ class DownloadWorker(QThread):
         self.progresso.emit(0, "extração", "Iniciando extração…")
 
         def cb(feito, total, bytes_feitos=0, total_bytes=0):
+            # Lança InterruptedError para interromper o loop de extração imediatamente
             if self._cancel_event.is_set():
-                return
+                raise InterruptedError("Extração cancelada pelo usuário.")
             pct = int(feito / total * 100) if total else 0
             self.progresso.emit(pct, "extração", f"Arquivo {feito}/{total}")
 
@@ -187,13 +196,27 @@ class DownloadWorker(QThread):
     # Limpeza
     # ------------------------------------------------------------------
 
-    def _limpar_zip(self):
+    def _limpar_residuos(self, parcial: bool = False):
+        """
+        Remove o ZIP temporário.
+        Se parcial=True, remove também a pasta de destino parcialmente extraída.
+        """
         try:
             if self._zip_destino.exists():
                 self._zip_destino.unlink()
                 logger.info(f"[{self._nome}] ZIP temporário removido.")
         except Exception as e:
             logger.warning(f"[{self._nome}] Não foi possível remover ZIP: {e}")
+
+        if parcial:
+            pasta = self._install_dir / self._nome
+            try:
+                if pasta.exists():
+                    import shutil
+                    shutil.rmtree(pasta)
+                    logger.info(f"[{self._nome}] Pasta parcial removida: {pasta}")
+            except Exception as e:
+                logger.warning(f"[{self._nome}] Não foi possível remover pasta parcial: {e}")
 
 
 # ------------------------------------------------------------------

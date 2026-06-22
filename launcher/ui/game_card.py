@@ -1,5 +1,15 @@
 """
-launcher/ui/game_card.py  — Etapa 3 (adaptado para os dados reais do projeto)
+launcher/ui/game_card.py  — Etapa 5
+
+Mudanças em relação à Etapa 4:
+  - Botão "Desinstalar" adicionado ao lado do botão principal nos estados
+    idle_jogar e idle_atualizar.
+  - Sinal desinstalado(nome_jogo: str) emitido após desinstalação bem-sucedida,
+    para a MainWindow mover o jogo de Biblioteca → Disponíveis na sidebar.
+  - _on_desinstalar: remove pasta do jogo, limpa version_local.json,
+    atualiza estado do card para nao_instalado.
+  - _set_idle e _atualizar_estado atualizados para mostrar/ocultar o botão
+    de desinstalar conforme o estado.
 
 Chave de campos do dicionário real:
   name, version_remote, version_local, status, type,
@@ -48,12 +58,14 @@ class GameCard(QWidget):
       download_concluido(nome_jogo)
       download_cancelado(nome_jogo)
       progresso_download(nome_jogo, pct, fase, detalhe)
+      desinstalado(nome_jogo)
     """
 
     download_iniciado  = Signal(str)
     download_concluido = Signal(str)
     download_cancelado = Signal(str)
     progresso_download = Signal(str, int, str, str)
+    desinstalado       = Signal(str)
     _thumb_pronta      = Signal(str)   # caminho do cache — uso interno
 
     def __init__(self, dados: dict, parent=None):
@@ -200,8 +212,23 @@ class GameCard(QWidget):
             QPushButton:hover {{ color: {COR_TEXTO}; border-color: {COR_MUTED}; }}
         """)
 
+        self._btn_desinstalar = QPushButton("Desinstalar")
+        self._btn_desinstalar.setFont(QFont(*FONTE_BOTAO))
+        self._btn_desinstalar.setFixedHeight(BTN_ALTURA)
+        self._btn_desinstalar.setCursor(Qt.PointingHandCursor)
+        self._btn_desinstalar.setVisible(False)
+        self._btn_desinstalar.clicked.connect(self._on_desinstalar)
+        self._btn_desinstalar.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {COR_MUTED};
+                border: 1px solid {COR_BORDA}; border-radius: 6px; padding: 0 16px;
+            }}
+            QPushButton:hover {{ color: #e07070; border-color: #8b1a1a; }}
+        """)
+
         btn_row.addWidget(self._btn_principal)
         btn_row.addWidget(self._btn_cancelar)
+        btn_row.addWidget(self._btn_desinstalar)
         cl.addLayout(btn_row)
 
         # Container de metadados (divisor + grade) — oculto quando não instalado
@@ -248,18 +275,23 @@ class GameCard(QWidget):
             self._lbl_status_badge.setText("")
             self._container_meta.setVisible(True)
             self._meta_jogado.setVisible(False)
+            self._btn_desinstalar.setVisible(False)
         elif status == "desatualizado":
             self._set_idle("atualizar")
             self._lbl_status_badge.setText("● Atualização disponível")
             self._lbl_status_badge.setStyleSheet(f"color: {STATUS_LARANJA};")
             self._container_meta.setVisible(True)
             self._meta_jogado.setVisible(True)
-        else:
+            self._btn_desinstalar.setVisible(True)
+            self._btn_desinstalar.setEnabled(True)
+        else:  # atualizado
             self._set_idle("jogar")
             self._lbl_status_badge.setText("● Atualizado")
             self._lbl_status_badge.setStyleSheet(f"color: {STATUS_VERDE};")
             self._container_meta.setVisible(True)
             self._meta_jogado.setVisible(True)
+            self._btn_desinstalar.setVisible(True)
+            self._btn_desinstalar.setEnabled(True)
 
     def _atualizar_meta(self):
         """Atualiza a grade de metadados abaixo do botão."""
@@ -297,6 +329,7 @@ class GameCard(QWidget):
         self._btn_cancelar.setVisible(True)
         self._btn_cancelar.setEnabled(True)
         self._btn_principal.setVisible(False)
+        self._btn_desinstalar.setVisible(False)
         self._barra.setValue(0)
         self._lbl_fase.setText("Iniciando…")
         self._lbl_detalhe.setText("")
@@ -305,6 +338,8 @@ class GameCard(QWidget):
     def _set_jogando(self):
         self._area_prog.setVisible(False)
         self._btn_cancelar.setVisible(False)
+        self._btn_desinstalar.setVisible(False)
+        self._btn_desinstalar.setEnabled(False)
         self._set_idle("jogando")
 
     # ------------------------------------------------------------------
@@ -378,7 +413,7 @@ class GameCard(QWidget):
 
     def _on_btn_principal(self):
         txt = self._btn_principal.text()
-        if txt in ("Instalar", "Atualizar"):
+        if txt in ("Instalar", "Atualizar", "Tentar novamente"):
             self._iniciar_download()
         elif txt == "Jogar":
             self._iniciar_jogo()
@@ -401,7 +436,6 @@ class GameCard(QWidget):
         if not dlg.confirmado:
             return
 
-        # Salva a pasta escolhida nos dados para o worker usar
         self._dados["pasta_instalacao"]  = dlg.pasta_escolhida
         self._dados["excluir_antivirus"] = dlg.excluir_antivirus
 
@@ -479,6 +513,76 @@ class GameCard(QWidget):
             self._btn_cancelar.setEnabled(False)
             self._lbl_fase.setText("Cancelando…")
 
+    def _on_desinstalar(self):
+        from PySide6.QtWidgets import QMessageBox
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("Desinstalar")
+        dlg.setText(f"Desinstalar <b>{self.nome}</b>?")
+        dlg.setInformativeText("Os arquivos do jogo serão removidos permanentemente.")
+        dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        dlg.setDefaultButton(QMessageBox.No)
+        dlg.button(QMessageBox.Yes).setText("Desinstalar")
+        dlg.button(QMessageBox.No).setText("Cancelar")
+        dlg.setStyleSheet(f"""
+            QMessageBox {{
+                background: #07152a;
+            }}
+            QLabel {{
+                color: #e8f4fd;
+                font-size: 13px;
+            }}
+            QPushButton {{
+                min-width: 100px; min-height: 32px;
+                border-radius: 6px; font-size: 13px;
+            }}
+            QPushButton[text="Desinstalar"] {{
+                background: #8b1a1a; color: #e8f4fd; border: none;
+            }}
+            QPushButton[text="Desinstalar"]:hover {{ background: #a02020; }}
+            QPushButton[text="Cancelar"] {{
+                background: transparent; color: #4a7fa8;
+                border: 1px solid #0c2a4a;
+            }}
+            QPushButton[text="Cancelar"]:hover {{ color: #e8f4fd; }}
+        """)
+
+        if dlg.exec() != QMessageBox.Yes:
+            return
+
+        self._executar_desinstalacao()
+
+    def _executar_desinstalacao(self):
+        import shutil
+        from launcher.core.version_checker import carregar_versao_local, salvar_versao_local
+
+        pasta = Path(obter_install_dir_jogo(self.nome)) / self.nome
+        try:
+            if pasta.exists():
+                shutil.rmtree(pasta)
+                logger.info(f"[{self.nome}] Pasta removida: {pasta}")
+            else:
+                logger.warning(f"[{self.nome}] Pasta não encontrada: {pasta}")
+        except Exception as e:
+            logger.error(f"[{self.nome}] Erro ao remover pasta: {e}")
+            self._mostrar_erro(f"Não foi possível remover a pasta:\n{e}")
+            return
+
+        try:
+            local = carregar_versao_local()
+            if self.nome in local:
+                del local[self.nome]
+                salvar_versao_local(local)
+                logger.info(f"[{self.nome}] Removido do version_local.json.")
+        except Exception as e:
+            logger.warning(f"[{self.nome}] Erro ao limpar version_local.json: {e}")
+
+        self._dados["status"]        = "nao_instalado"
+        self._dados["version_local"] = None
+        self._dados["last_played"]   = ""
+        self._atualizar_estado()
+        self.desinstalado.emit(self.nome)
+        logger.info(f"[{self.nome}] Desinstalado.")
+
     # ------------------------------------------------------------------
     # Slots do worker
     # ------------------------------------------------------------------
@@ -503,7 +607,6 @@ class GameCard(QWidget):
             if nome not in local:
                 local[nome] = {}
             local[nome]["version"] = versao
-            # Preserva install_dir e last_played se já existirem
             if self._dados.get("pasta_instalacao"):
                 local[nome]["install_dir"] = self._dados["pasta_instalacao"]
             salvar_versao_local(local)
@@ -532,6 +635,7 @@ class GameCard(QWidget):
     def _mostrar_erro(self, msg: str):
         self._area_prog.setVisible(True)
         self._btn_cancelar.setVisible(False)
+        self._btn_desinstalar.setVisible(False)
         self._btn_principal.setVisible(True)
         self._btn_principal.setEnabled(True)
         self._btn_principal.setText("Tentar novamente")
@@ -604,22 +708,12 @@ class _ThumbnailLabel(QLabel):
 # ---------------------------------------------------------------------------
 
 def _url_download_direto(url: str) -> str:
-    """
-    Converte qualquer formato de link do Google Drive para URL de download direto.
-    Funciona com arquivos públicos ("qualquer pessoa com o link").
-
-    Formatos suportados:
-      https://drive.google.com/open?id=ID
-      https://drive.google.com/file/d/ID/view
-      https://drive.google.com/uc?id=ID
-    """
     import re
-    # Tenta extrair o ID de qualquer formato
     match = re.search(r"(?:id=|/d/)([a-zA-Z0-9_-]{25,})", url)
     if match:
         file_id = match.group(1)
         return f"https://drive.google.com/uc?export=download&id={file_id}"
-    return url  # retorna original se não reconhecer o formato
+    return url
 
 
 def _aplicar_crop(pix: QPixmap, offset_pct: float, target_w: int, target_h: int) -> QPixmap:
@@ -639,20 +733,13 @@ def _aplicar_crop(pix: QPixmap, offset_pct: float, target_w: int, target_h: int)
 
 
 def _formatar_meta(dados: dict) -> list[str]:
-    """
-    Retorna lista de strings para as pills de metadados.
-    Exibe: tamanho e último acesso. Tipo omitido (irrelevante para o jogador).
-    """
     pills = []
-
     size = dados.get("size_bytes", 0)
     if size:
         pills.append(_fmt_tamanho(size))
-
     last_played = dados.get("last_played", "")
     if last_played:
         pills.append(f"Jogado em {_fmt_data(last_played)}")
-
     return pills
 
 

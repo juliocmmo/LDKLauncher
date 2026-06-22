@@ -1,3 +1,18 @@
+"""
+launcher/core/extractor.py
+
+Etapa 5 — alterações:
+  - except Exception agora re-lança InterruptedError antes de tratar como erro genérico.
+    Isso permite que o callback do DownloadWorker interrompa o loop de extração via
+    raise InterruptedError, que sobe até o run() do worker e é tratado corretamente.
+  - Removido o bloco finally com _limpar_arquivo_temporario em extrair_modpack,
+    extrair_prism e extrair_instancia_minecraft. O ZIP é gerenciado exclusivamente
+    pelo DownloadWorker._limpar_residuos() — ter dois lugares deletando o mesmo arquivo
+    causava erros silenciosos no log.
+  - _limpar_arquivo_temporario e _limpar_diretorio_parcial mantidos para uso interno
+    em caso de erro (sem o finally).
+"""
+
 import os
 import sys
 import zipfile
@@ -76,12 +91,13 @@ def extrair_modpack(
         logger.info(f"Extração concluída em: {caminho_destino}")
         return True
 
+    except InterruptedError:
+        # Cancelamento pelo usuário — re-lança para o DownloadWorker tratar
+        raise
     except Exception as e:
         logger.error(f"Erro durante extração: {e}", exc_info=True)
         _limpar_diretorio_parcial(caminho_destino)
         return False
-    finally:
-        _limpar_arquivo_temporario(caminho_zip)
 
 
 def extrair_prism(caminho_zip: str, prism_dir: str, callback_progresso=None) -> bool:
@@ -104,12 +120,12 @@ def extrair_prism(caminho_zip: str, prism_dir: str, callback_progresso=None) -> 
         logger.info("Prism Launcher extraído com sucesso.")
         return True
 
+    except InterruptedError:
+        raise
     except Exception as e:
         logger.error(f"Erro ao extrair Prism Launcher: {e}", exc_info=True)
         _limpar_diretorio_parcial(prism_dir)
         return False
-    finally:
-        _limpar_arquivo_temporario(caminho_zip)
 
 
 def extrair_instancia_minecraft(
@@ -140,7 +156,6 @@ def extrair_instancia_minecraft(
             total_bytes = sum(zip_ref.getinfo(a).file_size for a in arquivos)
             bytes_feitos = 0
 
-            # Detecta formato pelo conteúdo do zip
             nomes_raiz = {a.split("/")[0] for a in arquivos}
             formato_prism = "instance.cfg" in arquivos or "instance.cfg" in nomes_raiz
 
@@ -159,18 +174,17 @@ def extrair_instancia_minecraft(
                     if callback_progresso:
                         callback_progresso(i, total, bytes_feitos, total_bytes)
 
-                # Cria instance.cfg e mmc-pack.json se não existirem
                 _criar_arquivos_prism(destino, instance_name)
 
         logger.info(f"Instância '{instance_name}' extraída em: {destino}")
         return True
 
+    except InterruptedError:
+        raise
     except Exception as e:
         logger.error(f"Erro ao extrair instância Minecraft: {e}", exc_info=True)
         _limpar_diretorio_parcial(destino)
         return False
-    finally:
-        _limpar_arquivo_temporario(caminho_zip)
 
 
 def _criar_arquivos_prism(destino: str, instance_name: str) -> None:

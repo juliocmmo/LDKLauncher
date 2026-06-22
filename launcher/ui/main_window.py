@@ -1,29 +1,34 @@
 """
-launcher/ui/main_window.py — Etapa 3 (reescrita completa compatível com os dados reais)
+launcher/ui/main_window.py — Etapa 5
 
-Mudanças em relação à versão anterior:
-  - Sidebar emite jogo_selecionado(nome: str), não item_selecionado(indice: int)
-  - _cards é dict[str, GameCard] (chave = nome), não list
-  - Conecta sinais de download do GameCard ↔ Sidebar
-  - Suporte a auto-refresh (slot _on_refresh_silencioso)
+Mudanças em relação à Etapa 4:
+  - _Sinalizador ganha refresh_silencioso e toast
+  - _TitleBar ganha botão ↻ (referência guardada em self._title_bar)
+  - QTimer de 5 minutos para auto-refresh silencioso
+  - _refresh_bg: busca version.json remoto em background (auto e manual)
+  - _on_refresh_manual: chamado pelo botão ↻, emite toast ao concluir
+  - _on_refresh_silencioso: atualizado para registrar cards novos
+  - _mostrar_toast: notificação discreta no canto inferior direito (3s)
 """
 
 import threading
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QPushButton, QFrame, QStackedWidget,
+    QPushButton, QFrame, QStackedWidget, QLabel,
 )
-from PySide6.QtCore import Qt, Signal, QObject
+from PySide6.QtCore import Qt, Signal, QObject, QTimer
 from PySide6.QtGui  import QPalette, QColor
 
 from launcher.ui.theme import *
 
 
 class _Sinalizador(QObject):
-    atualizar_texto  = Signal(str)
-    ui_pronta        = Signal(list)
-    erro_conexao     = Signal(str)
+    atualizar_texto    = Signal(str)
+    ui_pronta          = Signal(list)
+    erro_conexao       = Signal(str)
+    refresh_silencioso = Signal(list)   # auto-refresh e manual (após UI pronta)
+    toast              = Signal(str)    # mensagem rápida para o usuário
 
 
 class _TitleBar(QWidget):
@@ -37,6 +42,14 @@ class _TitleBar(QWidget):
         layout.setContentsMargins(12, 0, 4, 0)
         layout.setSpacing(0)
         layout.addStretch()
+
+        # Botão de refresh manual
+        self._btn_refresh = QPushButton("↻")
+        self._btn_refresh.setFixedSize(32, 32)
+        self._btn_refresh.setCursor(Qt.PointingHandCursor)
+        self._btn_refresh.setToolTip("Atualizar lista de jogos")
+        self._btn_refresh.setStyleSheet(self._btn_css(COR_MUTED, COR_ITEM_ATIVO, COR_AZUL_CLARO))
+        layout.addWidget(self._btn_refresh)
 
         btn_min = QPushButton("−")
         btn_min.setFixedSize(32, 32)
@@ -92,7 +105,10 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(root)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(_TitleBar(root))
+
+        # Guardar referência para conectar o botão ↻ depois da UI estar pronta
+        self._title_bar = _TitleBar(root)
+        layout.addWidget(self._title_bar)
 
         corpo = QWidget()
         corpo_layout = QHBoxLayout(corpo)
@@ -101,7 +117,6 @@ class MainWindow(QMainWindow):
 
         from launcher.ui.sidebar import Sidebar
         self._sidebar = Sidebar()
-        # NOVO: sinal emite nome do jogo (str), não índice (int)
         self._sidebar.jogo_selecionado.connect(self._selecionar_card)
 
         borda = QFrame()
@@ -126,7 +141,6 @@ class MainWindow(QMainWindow):
         corpo_layout.addWidget(self._stack, 1)
         layout.addWidget(corpo, 1)
 
-        # NOVO: _cards é dict[nome → GameCard]
         self._cards: dict[str, "GameCard"] = {}
         self._jogos_remotos: list[dict] = []
 
@@ -134,6 +148,15 @@ class MainWindow(QMainWindow):
         self._sig.atualizar_texto.connect(self._loading.set_texto)
         self._sig.ui_pronta.connect(self._popular_ui)
         self._sig.erro_conexao.connect(self._loading.set_texto)
+        self._sig.refresh_silencioso.connect(self._on_refresh_silencioso)
+        self._sig.toast.connect(self._mostrar_toast)
+
+        # Timer de auto-refresh a cada 5 minutos (inicia somente após UI pronta)
+        self._timer_refresh = QTimer(self)
+        self._timer_refresh.setInterval(5 * 60 * 1000)
+        self._timer_refresh.timeout.connect(self._refresh_bg)
+        self._refresh_em_andamento = False
+
         # NÃO chama _inicializar aqui — quem chama é o main.py
 
     # ------------------------------------------------------------------
@@ -166,13 +189,12 @@ class MainWindow(QMainWindow):
             self._painel_layout.addWidget(card)
             self._cards[nome] = card
 
-            # Conectar sinais de download
             card.download_iniciado.connect(self._on_download_iniciado)
             card.download_concluido.connect(self._on_download_concluido)
             card.download_cancelado.connect(self._on_download_cancelado)
             card.progresso_download.connect(self._on_progresso_download)
+            card.desinstalado.connect(self._on_desinstalado)
 
-        # Mostrar o primeiro card (ou o primeiro da aba biblioteca)
         primeiro = next(
             (d["name"] for d in modpacks if d.get("status") != "nao_instalado"),
             modpacks[0]["name"] if modpacks else None
@@ -181,6 +203,10 @@ class MainWindow(QMainWindow):
             self._selecionar_card(primeiro)
 
         self._stack.setCurrentIndex(1)
+
+        # Iniciar timer de auto-refresh e conectar botão ↻ agora que a UI está pronta
+        self._timer_refresh.start()
+        self._title_bar._btn_refresh.clicked.connect(self._on_refresh_manual)
 
     # ------------------------------------------------------------------
     # Navegação
@@ -197,7 +223,6 @@ class MainWindow(QMainWindow):
 
     def _on_download_iniciado(self, nome: str):
         self._sidebar.marcar_baixando(nome)
-        # Desabilitar botão principal dos outros cards
         for n, card in self._cards.items():
             if n != nome:
                 card._btn_principal.setEnabled(False)
@@ -207,7 +232,6 @@ class MainWindow(QMainWindow):
         self._sidebar.atualizar_status_jogo(nome, "atualizado")
         for card in self._cards.values():
             card._btn_principal.setEnabled(True)
-        # Repopular sidebar (jogo sai da Loja e vai para Biblioteca)
         self._sidebar.popular(self._jogos_remotos)
 
     def _on_download_cancelado(self, nome: str):
@@ -218,8 +242,26 @@ class MainWindow(QMainWindow):
     def _on_progresso_download(self, nome: str, pct: int, fase: str, detalhe: str):
         self._sidebar.atualizar_progresso(nome, pct, detalhe)
 
+    def _on_desinstalado(self, nome: str):
+        """Move o jogo de Biblioteca → Disponíveis e seleciona outro card."""
+        # Atualiza a lista remota em memória para refletir nao_instalado
+        for dados in self._jogos_remotos:
+            if dados["name"] == nome:
+                dados["status"] = "nao_instalado"
+                break
+
+        self._sidebar.popular(self._jogos_remotos)
+
+        # Seleciona outro card instalado, ou o primeiro disponível
+        outro = next(
+            (n for n, c in self._cards.items() if n != nome and c.status != "nao_instalado"),
+            next((n for n in self._cards if n != nome), None)
+        )
+        if outro:
+            self._selecionar_card(outro)
+
     # ------------------------------------------------------------------
-    # Auto-refresh (chamado pelo timer de 5 min, quando implementado)
+    # Auto-refresh silencioso (timer de 5 min)
     # ------------------------------------------------------------------
 
     def _on_refresh_silencioso(self, jogos: list[dict]):
@@ -232,3 +274,95 @@ class MainWindow(QMainWindow):
                 card = self._cards[nome]
                 if card._worker is None:
                     card.atualizar_dados(dados)
+            else:
+                # Jogo novo que apareceu no version.json remoto
+                from launcher.ui.game_card import GameCard
+                card = GameCard(dados)
+                card.hide()
+                self._painel_layout.addWidget(card)
+                self._cards[nome] = card
+                card.download_iniciado.connect(self._on_download_iniciado)
+                card.download_concluido.connect(self._on_download_concluido)
+                card.download_cancelado.connect(self._on_download_cancelado)
+                card.progresso_download.connect(self._on_progresso_download)
+                card.desinstalado.connect(self._on_desinstalado)
+        self._refresh_em_andamento = False
+
+    # ------------------------------------------------------------------
+    # Refresh background (compartilhado entre auto e manual)
+    # ------------------------------------------------------------------
+
+    def _refresh_bg(self):
+        """Dispara busca remota em background. Usado pelo timer de 5 min."""
+        if self._refresh_em_andamento:
+            return
+        self._refresh_em_andamento = True
+
+        def _buscar():
+            from launcher.core.version_checker import (
+                buscar_versao_remota, carregar_versao_local, verificar_status_modpacks
+            )
+            remoto = buscar_versao_remota()
+            if remoto is None:
+                self._refresh_em_andamento = False
+                return
+            local    = carregar_versao_local()
+            modpacks = verificar_status_modpacks(remoto, local)
+            self._sig.refresh_silencioso.emit(modpacks)
+
+        threading.Thread(target=_buscar, daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # Refresh manual (botão ↻)
+    # ------------------------------------------------------------------
+
+    def _on_refresh_manual(self):
+        """Chamado pelo botão ↻ na title bar. Igual ao auto, mas emite toast."""
+        if self._refresh_em_andamento:
+            return
+        self._refresh_em_andamento = True
+
+        def _buscar():
+            from launcher.core.version_checker import (
+                buscar_versao_remota, carregar_versao_local, verificar_status_modpacks
+            )
+            remoto = buscar_versao_remota()
+            if remoto is None:
+                self._refresh_em_andamento = False
+                self._sig.toast.emit("Sem conexão. Não foi possível atualizar.")
+                return
+            local    = carregar_versao_local()
+            modpacks = verificar_status_modpacks(remoto, local)
+            self._sig.refresh_silencioso.emit(modpacks)
+            self._sig.toast.emit("Lista de jogos atualizada.")
+
+        threading.Thread(target=_buscar, daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # Toast
+    # ------------------------------------------------------------------
+
+    def _mostrar_toast(self, mensagem: str):
+        """Notificação discreta no canto inferior direito. Some após 3 segundos."""
+        toast = QLabel(mensagem, self.centralWidget())
+        toast.setStyleSheet(f"""
+            QLabel {{
+                background: {COR_ITEM_ATIVO};
+                color: {COR_TEXTO};
+                border: 1px solid {COR_BORDA};
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 13px;
+            }}
+        """)
+        toast.adjustSize()
+
+        # Reposicionar se a janela for redimensionada entre chamadas
+        cw = self.centralWidget()
+        x  = cw.width()  - toast.width()  - 20
+        y  = cw.height() - toast.height() - 20
+        toast.move(x, y)
+        toast.show()
+        toast.raise_()
+
+        QTimer.singleShot(3000, toast.deleteLater)
