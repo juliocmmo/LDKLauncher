@@ -752,10 +752,12 @@ def _fmt_tamanho(bytes_: int) -> str:
 
 
 def _fmt_data(iso: str) -> str:
-    """Converte 'YYYY-MM-DD' ou datetime ISO para 'DD/MM/YYYY'."""
+    """Converte ISO para 'DD/MM/YYYY HH:MM' se tiver hora, ou só 'DD/MM/YYYY'."""
     try:
         from datetime import datetime
         dt = datetime.fromisoformat(iso)
+        if dt.hour or dt.minute:
+            return dt.strftime("%d/%m/%Y %H:%M")
         return dt.strftime("%d/%m/%Y")
     except Exception:
         return iso

@@ -226,18 +226,21 @@ class MainWindow(QMainWindow):
         for n, card in self._cards.items():
             if n != nome:
                 card._btn_principal.setEnabled(False)
+                card._btn_desinstalar.setEnabled(False)
 
     def _on_download_concluido(self, nome: str):
         self._sidebar.desmarcar_baixando(nome)
         self._sidebar.atualizar_status_jogo(nome, "atualizado")
         for card in self._cards.values():
             card._btn_principal.setEnabled(True)
+            card._btn_desinstalar.setEnabled(True)
         self._sidebar.popular(self._jogos_remotos)
 
     def _on_download_cancelado(self, nome: str):
         self._sidebar.desmarcar_baixando(nome)
         for card in self._cards.values():
             card._btn_principal.setEnabled(True)
+            card._btn_desinstalar.setEnabled(True)
 
     def _on_progresso_download(self, nome: str, pct: int, fase: str, detalhe: str):
         self._sidebar.atualizar_progresso(nome, pct, detalhe)

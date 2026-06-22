@@ -117,7 +117,11 @@ class DownloadWorker(QThread):
     # ------------------------------------------------------------------
 
     def _fase_download(self):
-        tamanho = self._dados.get("size_bytes", 0)
+        import time
+        tamanho      = self._dados.get("size_bytes", 0)
+        _t_inicio    = [time.monotonic()]
+        _baixado_ant = [0]
+        _vel_bps     = [0.0]
 
         def cb(baixado, total):
             if self._cancel_event.is_set():
@@ -125,7 +129,30 @@ class DownloadWorker(QThread):
             pct = int(baixado / total * 100) if total else 0
             baixado_str = f"{baixado / 1024**2:.0f} MB"
             total_str   = f"{total   / 1024**2:.0f} MB"
-            self.progresso.emit(pct, "download", f"{baixado_str} / {total_str}")
+
+            agora   = time.monotonic()
+            delta_t = agora - _t_inicio[0]
+            if delta_t >= 0.5:
+                _vel_bps[0]   = (baixado - _baixado_ant[0]) / delta_t
+                _t_inicio[0]  = agora
+                _baixado_ant[0] = baixado
+
+            restante = (
+                (total - baixado) / _vel_bps[0]
+                if _vel_bps[0] > 0 and total > baixado else 0.0
+            )
+
+            vel_str = _fmt_velocidade(_vel_bps[0]) if _vel_bps[0] > 0 else ""
+            eta_str = _fmt_tempo(restante)          if restante   > 0 else ""
+
+            if vel_str and eta_str:
+                detalhe = f"{baixado_str} / {total_str}  •  {vel_str}  •  {eta_str}"
+            elif vel_str:
+                detalhe = f"{baixado_str} / {total_str}  •  {vel_str}"
+            else:
+                detalhe = f"{baixado_str} / {total_str}"
+
+            self.progresso.emit(pct, "download", detalhe)
 
         # CORRIGIDO: uma única chamada, passando o caminho completo do destino
         resultado = baixar_arquivo(
