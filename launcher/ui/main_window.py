@@ -292,8 +292,7 @@ class MainWindow(QMainWindow):
             nome = dados["name"]
             if nome in self._cards:
                 card = self._cards[nome]
-                if card._worker is None:
-                    card.atualizar_dados(dados)
+                card.atualizar_dados(dados)
             else:
                 # Jogo novo que apareceu no version.json remoto
                 from launcher.ui.game_card import GameCard

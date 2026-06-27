@@ -210,12 +210,6 @@ def _criar_arquivos_prism(destino: str, instance_name: str) -> None:
         logger.info(f"mmc-pack.json criado para '{instance_name}'.")
 
 
-def _limpar_arquivo_temporario(caminho: str) -> None:
-    if os.path.exists(caminho):
-        os.remove(caminho)
-        logger.info(f"Arquivo temporário removido: {caminho}")
-
-
 def _limpar_diretorio_parcial(caminho: str) -> None:
     if os.path.exists(caminho):
         shutil.rmtree(caminho)

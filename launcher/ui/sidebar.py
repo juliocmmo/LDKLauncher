@@ -234,9 +234,6 @@ class Sidebar(QWidget):
         if nome in self._itens:
             self._itens[nome].set_ativo(True)
 
-    def _on_refresh_externo(self):
-        pass  # conexão feita em main_window.py via _rodape_fixo.btn_refresh
-
     def _abrir_config(self):
         from launcher.ui.setup_window import SetupWindow
         dlg = SetupWindow(parent=self, callback_concluido=lambda: None)
@@ -475,20 +472,6 @@ class _RodapeDownload(QFrame):
     def atualizar(self, nome: str, pct: int, detalhe: str):
         self._lbl_nome.setText(f"⬇  {nome}")
         self._lbl_det.setText(f"{pct}%  {detalhe}" if pct else detalhe)
-
-
-# ---------------------------------------------------------------------------
-# Converte URL do Drive para download direto
-# ---------------------------------------------------------------------------
-
-def _url_download_direto(url: str) -> str:
-    import re
-    match = re.search(r"(?:id=|/d/)([a-zA-Z0-9_-]{25,})", url)
-    if match:
-        file_id = match.group(1)
-        return f"https://drive.google.com/uc?export=download&id={file_id}"
-    return url
-
 
 # ---------------------------------------------------------------------------
 # Helper: carrega ícone do cabeçalho da sidebar

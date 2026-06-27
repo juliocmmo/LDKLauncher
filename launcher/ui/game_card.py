@@ -742,19 +742,6 @@ class _ThumbnailLabel(QLabel):
 # Crop de thumbnail
 # ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Converte URL do Drive para download direto
-# ---------------------------------------------------------------------------
-
-def _url_download_direto(url: str) -> str:
-    import re
-    match = re.search(r"(?:id=|/d/)([a-zA-Z0-9_-]{25,})", url)
-    if match:
-        file_id = match.group(1)
-        return f"https://drive.google.com/uc?export=download&id={file_id}"
-    return url
-
-
 def _aplicar_crop(pix: QPixmap, offset_pct: float, target_w: int, target_h: int) -> QPixmap:
     if pix.isNull() or target_w <= 0 or target_h <= 0:
         return pix
@@ -769,17 +756,6 @@ def _aplicar_crop(pix: QPixmap, offset_pct: float, target_w: int, target_h: int)
     offset_px = max(0, min(offset_px, max_off))
     x = (pix_s.width() - target_w) // 2
     return pix_s.copy(x, offset_px, target_w, target_h)
-
-
-def _formatar_meta(dados: dict) -> list[str]:
-    pills = []
-    size = dados.get("size_bytes", 0)
-    if size:
-        pills.append(_fmt_tamanho(size))
-    last_played = dados.get("last_played", "")
-    if last_played:
-        pills.append(f"Jogado em {_fmt_data(last_played)}")
-    return pills
 
 
 def _fmt_tamanho(bytes_: int) -> str:
