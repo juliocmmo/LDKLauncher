@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QColor, QPainter, QPainterPath
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QProgressBar
 
-from ui.theme import (
+from launcher.ui.theme import (
     COR_BG, COR_BORDA, COR_AZUL_CLARO, COR_TEXTO, COR_MUTED
 )
 

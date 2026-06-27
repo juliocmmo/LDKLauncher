@@ -9,12 +9,12 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
 
-from ui.theme import (
+from launcher.ui.theme import (
     COR_BG, COR_SIDEBAR, COR_BORDA, COR_ITEM_ATIVO,
     COR_AZUL, COR_AZUL_CLARO, COR_TEXTO, COR_MUTED, COR_MUTED_DARK
 )
-from config.settings import obter_install_dir
-from core.antivirus import esta_excluida
+from launcher.config.settings import obter_install_dir
+from launcher.core.antivirus import esta_excluida
 
 
 class InstallDialog(QDialog):

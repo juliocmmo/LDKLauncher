@@ -9,12 +9,12 @@ logger = get_logger()
 
 
 def _carregar_config() -> dict:
-    from config.settings import carregar_config
+    from launcher.config.settings import carregar_config
     return carregar_config()
 
 
 def _salvar_config(config: dict):
-    from config.settings import salvar_config
+    from launcher.config.settings import salvar_config
     salvar_config(config)
 
 
