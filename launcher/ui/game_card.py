@@ -64,6 +64,7 @@ class GameCard(QWidget):
     download_iniciado  = Signal(str)
     download_concluido = Signal(str)
     download_cancelado = Signal(str)
+    download_erro      = Signal(str)
     progresso_download = Signal(str, int, str, str)
     desinstalado       = Signal(str)
     _thumb_pronta      = Signal(str)   # caminho do cache — uso interno
@@ -650,7 +651,7 @@ class GameCard(QWidget):
     def _on_erro(self, nome: str, msg: str):
         self._worker = None
         self._mostrar_erro(msg)
-        self.download_cancelado.emit(nome)
+        self.download_erro.emit(nome)
 
     def _on_cancelado(self, nome: str):
         self._worker = None

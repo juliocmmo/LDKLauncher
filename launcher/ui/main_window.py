@@ -191,6 +191,7 @@ class MainWindow(QMainWindow):
             card.download_iniciado.connect(self._on_download_iniciado)
             card.download_concluido.connect(self._on_download_concluido)
             card.download_cancelado.connect(self._on_download_cancelado)
+            card.download_erro.connect(self._on_download_erro)
             card.progresso_download.connect(self._on_progresso_download)
             card.desinstalado.connect(self._on_desinstalado)
 
@@ -252,6 +253,12 @@ class MainWindow(QMainWindow):
             card._btn_principal.setEnabled(True)
             card._btn_desinstalar.setEnabled(True)
 
+    def _on_download_erro(self, nome: str):
+        self._sidebar.desmarcar_baixando(nome)
+        for card in self._cards.values():
+            card._btn_principal.setEnabled(True)
+            card._btn_desinstalar.setEnabled(True)
+
     def _on_progresso_download(self, nome: str, pct: int, fase: str, detalhe: str):
         self._sidebar.atualizar_progresso(nome, pct, detalhe)
 
@@ -297,6 +304,7 @@ class MainWindow(QMainWindow):
                 card.download_iniciado.connect(self._on_download_iniciado)
                 card.download_concluido.connect(self._on_download_concluido)
                 card.download_cancelado.connect(self._on_download_cancelado)
+                card.download_erro.connect(self._on_download_erro)
                 card.progresso_download.connect(self._on_progresso_download)
                 card.desinstalado.connect(self._on_desinstalado)
         self._refresh_em_andamento = False
