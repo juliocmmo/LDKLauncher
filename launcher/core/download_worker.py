@@ -207,17 +207,20 @@ class DownloadWorker(QThread):
             self.progresso.emit(pct, "extração", f"Arquivo {feito}/{total}")
 
         if self._tipo == "minecraft":
-            extrair_instancia_minecraft(
+            ok = extrair_instancia_minecraft(
                 caminho_zip=str(self._zip_destino),
                 instance_name=self._inst_name or self._nome,
                 callback_progresso=cb,
             )
         else:
-            extrair_modpack(
+            ok = extrair_modpack(
                 caminho_zip=str(self._zip_destino),
                 caminho_destino=str(self._install_dir / self._nome),
                 callback_progresso=cb,
             )
+
+        if not ok:
+            raise RuntimeError("Extração falhou. Verifique os logs para mais detalhes.")
 
     # ------------------------------------------------------------------
     # Limpeza
