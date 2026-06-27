@@ -21,7 +21,7 @@ Chave de campos do dicionário real:
 from pathlib import Path
 
 from PySide6.QtCore    import Qt, QTimer, Signal
-from PySide6.QtGui     import QPixmap, QFont, QColor, QPainter
+from PySide6.QtGui     import QPixmap, QFont, QColor, QPainter, QLinearGradient
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QProgressBar, QSizePolicy, QFrame,
@@ -716,8 +716,16 @@ class _ThumbnailLabel(QLabel):
             p = QPainter(self)
             p.fillRect(self.rect(), QColor(COR_BANNER))
             p.end()
-        else:
-            super().paintEvent(event)
+            return
+
+        # Desenha a imagem manualmente e aplica gradiente no mesmo painter
+        p = QPainter(self)
+        p.drawPixmap(self.rect(), pix)
+        grad = QLinearGradient(0, self.height() * 0.5, 0, self.height())
+        grad.setColorAt(0.0, QColor(0, 0, 0, 0))
+        grad.setColorAt(1.0, QColor(7, 21, 42, 210))
+        p.fillRect(self.rect(), grad)
+        p.end()
 
 
 # ---------------------------------------------------------------------------
