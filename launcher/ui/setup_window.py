@@ -182,6 +182,8 @@ class SetupWindow(QDialog):
         return sep
 
     def _aplicar_estilos(self):
+        base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        check_svg = os.path.join(base_path, "assets", "check.svg").replace("\\", "/")
         self.setStyleSheet(f"""
             QDialog {{
                 background: {COR_BG};
@@ -258,7 +260,7 @@ class SetupWindow(QDialog):
             QCheckBox#checkAv::indicator:checked {{
                 background: {COR_AZUL};
                 border-color: {COR_AZUL};
-                image: url(launcher/assets/check.svg);
+                image: url("{check_svg}");
             }}
             QCheckBox#checkAv::indicator:hover {{
                 border-color: {COR_AZUL_CLARO};
