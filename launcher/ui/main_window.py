@@ -9,6 +9,12 @@ Mudanças em relação à Etapa 4:
   - _on_refresh_manual: chamado pelo botão ↻, emite toast ao concluir
   - _on_refresh_silencioso: atualizado para registrar cards novos
   - _mostrar_toast: notificação discreta no canto inferior direito (3s)
+
+Correções aplicadas pós code-review:
+  - #8:  _on_erro emite download_erro (sinal dedicado) em vez de download_cancelado
+  - #16: removida verificação redundante de card._worker em _on_refresh_silencioso
+  - Botão maximizar/restaurar adicionado à _TitleBar
+  - Resize nativo por borda via nativeEvent (WM_NCHITTEST)
 """
 
 import threading
@@ -56,12 +62,28 @@ class _TitleBar(QWidget):
         btn_min.clicked.connect(lambda: self.window().showMinimized())
         layout.addWidget(btn_min)
 
+        self._btn_max = QPushButton("❐")
+        self._btn_max.setFixedSize(32, 32)
+        self._btn_max.setCursor(Qt.PointingHandCursor)
+        self._btn_max.setStyleSheet(self._btn_css(COR_MUTED, COR_ITEM_ATIVO, COR_TEXTO))
+        self._btn_max.clicked.connect(self._toggle_maximizar)
+        layout.addWidget(self._btn_max)
+
         btn_close = QPushButton("✕")
         btn_close.setFixedSize(32, 32)
         btn_close.setCursor(Qt.PointingHandCursor)
         btn_close.setStyleSheet(self._btn_css(COR_MUTED, "#8b1a1a", COR_TEXTO))
         btn_close.clicked.connect(self.window().close)
         layout.addWidget(btn_close)
+
+    def _toggle_maximizar(self):
+        win = self.window()
+        if win.isMaximized():
+            win.showNormal()
+            self._btn_max.setText("❐")
+        else:
+            win.showMaximized()
+            self._btn_max.setText("❒")
 
     @staticmethod
     def _btn_css(color, hover_bg, hover_color):
@@ -157,6 +179,41 @@ class MainWindow(QMainWindow):
         self._refresh_em_andamento = False
 
         # NÃO chama _inicializar aqui — quem chama é o main.py
+
+    # ------------------------------------------------------------------
+    # Resize nativo por borda (Windows — WM_NCHITTEST)
+    # ------------------------------------------------------------------
+
+    _RESIZE_MARGIN = 8
+
+    def nativeEvent(self, eventType, message):
+        import ctypes
+        from ctypes.wintypes import MSG
+
+        if eventType == b"windows_generic_MSG":
+            msg = ctypes.cast(int(message), ctypes.POINTER(MSG)).contents
+
+            if msg.message == 0x0084:  # WM_NCHITTEST
+                x = ctypes.c_short(msg.lParam & 0xFFFF).value
+                y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
+                geo = self.geometry()
+                m   = self._RESIZE_MARGIN
+
+                esq   = x < geo.x() + m
+                dir_  = x > geo.x() + geo.width()  - m
+                topo  = y < geo.y() + m
+                baixo = y > geo.y() + geo.height() - m
+
+                if topo  and esq:  return True, 13  # HTTOPLEFT
+                if topo  and dir_: return True, 14  # HTTOPRIGHT
+                if baixo and esq:  return True, 16  # HTBOTTOMLEFT
+                if baixo and dir_: return True, 17  # HTBOTTOMRIGHT
+                if esq:            return True, 10  # HTLEFT
+                if dir_:           return True, 11  # HTRIGHT
+                if topo:           return True, 12  # HTTOP
+                if baixo:          return True, 15  # HTBOTTOM
+
+        return super().nativeEvent(eventType, message)
 
     # ------------------------------------------------------------------
     # Inicialização
@@ -264,7 +321,6 @@ class MainWindow(QMainWindow):
 
     def _on_desinstalado(self, nome: str):
         """Move o jogo de Biblioteca → Disponíveis e seleciona outro card."""
-        # Atualiza a lista remota em memória para refletir nao_instalado
         for dados in self._jogos_remotos:
             if dados["name"] == nome:
                 dados["status"] = "nao_instalado"
@@ -272,7 +328,6 @@ class MainWindow(QMainWindow):
 
         self._sidebar.popular(self._jogos_remotos)
 
-        # Seleciona outro card instalado, ou o primeiro disponível
         outro = next(
             (n for n, c in self._cards.items() if n != nome and c.status != "nao_instalado"),
             next((n for n in self._cards if n != nome), None)
@@ -294,7 +349,6 @@ class MainWindow(QMainWindow):
                 card = self._cards[nome]
                 card.atualizar_dados(dados)
             else:
-                # Jogo novo que apareceu no version.json remoto
                 from launcher.ui.game_card import GameCard
                 card = GameCard(dados)
                 card.hide()
@@ -377,7 +431,6 @@ class MainWindow(QMainWindow):
         """)
         toast.adjustSize()
 
-        # Reposicionar se a janela for redimensionada entre chamadas
         cw = self.centralWidget()
         x  = cw.width()  - toast.width()  - 20
         y  = cw.height() - toast.height() - 20
@@ -392,9 +445,7 @@ class MainWindow(QMainWindow):
         from launcher.ui.notification_popup import NotificationPopup
         popup = NotificationPopup(titulo, texto, icone_path, sucesso)
         popup.show()
-        # Guarda referência para não ser coletado pelo GC
         if not hasattr(self, "_popups"):
             self._popups = []
         self._popups.append(popup)
-        # Remove da lista quando fechar
         popup.destroyed.connect(lambda: self._popups.remove(popup) if popup in self._popups else None)

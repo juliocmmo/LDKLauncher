@@ -28,6 +28,27 @@ logger = get_logger()
 COR_DOWNLOAD_ATIVO = "#1a3a5c"
 COR_DOWNLOAD_TEXTO = COR_AZUL_CLARO
 
+class ElidedLabel(QLabel):
+    """QLabel que trunca com '…' quando o texto não cabe na largura disponível."""
+    def __init__(self, text="", parent=None):
+        super().__init__(parent)
+        self._full_text = text
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+
+    def setText(self, text: str):
+        self._full_text = text
+        self._atualizar_elide()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._atualizar_elide()
+
+    def _atualizar_elide(self):
+        elided = self.fontMetrics().elidedText(
+            self._full_text, Qt.ElideRight, self.width()
+        )
+        super().setText(elided)
+
 
 class Sidebar(QWidget):
     """
@@ -317,7 +338,7 @@ class _ItemSidebar(QWidget):
         # Texto
         col = QVBoxLayout()
         col.setSpacing(2)
-        self._lbl_nome = QLabel(self._nome)
+        self._lbl_nome = ElidedLabel(self._nome)
         self._lbl_nome.setFont(QFont(*FONTE_SIDEBAR_NOME))
         self._lbl_nome.setStyleSheet(f"color: {COR_TEXTO};")
         self._lbl_sub = QLabel()
