@@ -333,12 +333,22 @@ class _ItemSidebar(QWidget):
         self._refresh_bg()
 
     def _carregar_icone(self, url: str):
-        """Tenta carregar ícone do cache local."""
+        """Tenta carregar ícone do cache local, invalidando se a URL mudou."""
         if not url:
             return
         from pathlib import Path
         from launcher.config.settings import CONFIG_DIR
         cache = Path(CONFIG_DIR) / "icons" / f"{self._nome}.png"
+        meta  = cache.with_suffix(".meta")
+
+        if cache.exists() and meta.exists():
+            try:
+                if meta.read_text(encoding="utf-8").strip() != url:
+                    cache.unlink()
+                    meta.unlink()
+            except Exception:
+                pass
+
         if cache.exists():
             w, h = ICONE_SIDEBAR_TAMANHO
             pix = QPixmap(str(cache)).scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -348,14 +358,16 @@ class _ItemSidebar(QWidget):
         self._baixar_icone_bg(url, cache)
 
     def _baixar_icone_bg(self, url: str, cache):
-        import threading, requests
+        import threading
         def _dl():
             try:
-                cache.parent.mkdir(parents=True, exist_ok=True)
-                r = requests.get(_url_download_direto(url), timeout=10)
-                r.raise_for_status()
-                cache.write_bytes(r.content)
-                self._icone_pronto.emit(str(cache))
+                from shared.drive_utils import baixar_asset_drive
+                ok = baixar_asset_drive(url, cache)
+                if ok:
+                    # Salva meta para invalidação de cache
+                    meta = cache.with_suffix(".meta")
+                    meta.write_text(url, encoding="utf-8")
+                    self._icone_pronto.emit(str(cache))
             except Exception:
                 pass
         threading.Thread(target=_dl, daemon=True).start()
@@ -468,57 +480,6 @@ class _RodapeDownload(QFrame):
 # ---------------------------------------------------------------------------
 # Converte URL do Drive para download direto
 # ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Rodapé fixo: versão + botões ↻ e ⚙
-# ---------------------------------------------------------------------------
-
-class _RodapeFixo(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedHeight(52)
-        self.setMinimumWidth(220)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setStyleSheet(f"border-top: 1px solid {COR_BORDA};")
-
-        from launcher.config.settings import LAUNCHER_VERSION
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 0, 12, 0)
-        layout.setSpacing(4)
-
-        lbl_ver = QLabel(f"v{LAUNCHER_VERSION}")
-        lbl_ver.setFont(QFont("Segoe UI", 10))
-        lbl_ver.setStyleSheet(f"color: {COR_MUTED};")
-        layout.addWidget(lbl_ver)
-
-        layout.addStretch()
-
-        _css_btn = f"""
-            QPushButton {{
-                background: transparent; color: {COR_MUTED};
-                border: none; font-size: 18px;
-            }}
-            QPushButton:hover {{
-                color: {COR_TEXTO};
-                background: {COR_ITEM_ATIVO};
-                border-radius: 6px;
-            }}
-        """
-
-        self.btn_refresh = QPushButton("↻")
-        self.btn_refresh.setFixedSize(34, 34)
-        self.btn_refresh.setCursor(Qt.PointingHandCursor)
-        self.btn_refresh.setToolTip("Atualizar lista de jogos")
-        self.btn_refresh.setStyleSheet(_css_btn)
-        layout.addWidget(self.btn_refresh)
-
-        self.btn_config = QPushButton("⚙")
-        self.btn_config.setFixedSize(34, 34)
-        self.btn_config.setCursor(Qt.PointingHandCursor)
-        self.btn_config.setToolTip("Configurações")
-        self.btn_config.setStyleSheet(_css_btn)
-        layout.addWidget(self.btn_config)
 
 def _url_download_direto(url: str) -> str:
     import re

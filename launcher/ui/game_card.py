@@ -373,32 +373,39 @@ class GameCard(QWidget):
     # ------------------------------------------------------------------
 
     def _carregar_thumbnail(self):
-        """
-        Tenta carregar do cache local; se não existir, baixa em background.
-        Cache em: <LOCALAPPDATA>/LDKLauncher/thumbs/<nome>.jpg
-        """
-        import os
         from launcher.config.settings import CONFIG_DIR
 
         thumbs_dir = Path(CONFIG_DIR) / "thumbs"
         thumbs_dir.mkdir(parents=True, exist_ok=True)
-        cache = thumbs_dir / f"{self.nome}.jpg"
+        cache      = thumbs_dir / f"{self.nome}.jpg"
+        cache_meta = thumbs_dir / f"{self.nome}.meta"
+        url        = self._dados.get("thumbnail_url", "")
+
+        # Invalida cache se a URL mudou
+        if cache.exists() and cache_meta.exists():
+            try:
+                url_salva = cache_meta.read_text(encoding="utf-8").strip()
+                if url_salva != url:
+                    cache.unlink()
+                    cache_meta.unlink()
+            except Exception:
+                pass
 
         if cache.exists():
             self._aplicar_pixmap(QPixmap(str(cache)))
-        else:
-            url = self._dados.get("thumbnail_url", "")
-            if url:
-                self._baixar_thumbnail_bg(url, cache)
+        elif url:
+            self._baixar_thumbnail_bg(url, cache, cache_meta)
 
-    def _baixar_thumbnail_bg(self, url: str, cache: Path):
-        import threading, requests
+    def _baixar_thumbnail_bg(self, url: str, cache: Path, cache_meta: Path | None = None):
+        import threading
         def _dl():
             try:
-                r = requests.get(_url_download_direto(url), timeout=15)
-                r.raise_for_status()
-                cache.write_bytes(r.content)
-                self._thumb_pronta.emit(str(cache))
+                from shared.drive_utils import baixar_asset_drive
+                ok = baixar_asset_drive(url, cache)
+                if ok:
+                    if cache_meta:
+                        cache_meta.write_text(url, encoding="utf-8")
+                    self._thumb_pronta.emit(str(cache))
             except Exception as e:
                 logger.warning(f"[{self.nome}] Thumbnail não carregou: {e}")
         threading.Thread(target=_dl, daemon=True).start()

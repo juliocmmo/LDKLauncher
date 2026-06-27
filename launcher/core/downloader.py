@@ -54,23 +54,9 @@ def _extrair_id_google_drive(url: str) -> str | None:
 
 
 def _get_service_account_token() -> str:
-    """Obtém access token via Service Account (credencial em memória)."""
-    from google.oauth2 import service_account
-    from google.auth.transport.requests import Request as GoogleRequest
-
-    try:
-        from core.credentials import SERVICE_ACCOUNT_B64
-    except ImportError:
-        raise RuntimeError("Arquivo core/credentials.py não encontrado.")
-
-    credencial_json = json.loads(base64.b64decode(SERVICE_ACCOUNT_B64).decode("utf-8"))
-
-    scopes = ["https://www.googleapis.com/auth/drive.readonly"]
-    credenciais = service_account.Credentials.from_service_account_info(
-        credencial_json, scopes=scopes
-    )
-    credenciais.refresh(GoogleRequest())
-    return credenciais.token
+    """Obtém access token via Service Account — delega ao drive_utils (cache incluso)."""
+    from shared.drive_utils import _get_token
+    return _get_token()
 
 
 def _baixar_google_drive_api(
