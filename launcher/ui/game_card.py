@@ -11,6 +11,15 @@ Mudanças em relação à Etapa 4:
   - _set_idle e _atualizar_estado atualizados para mostrar/ocultar o botão
     de desinstalar conforme o estado.
 
+Correções pós code-review:
+  - #4:  _set_baixando força _barra.setVisible(True)
+  - #5:  _pix_original salvo para evitar degradação no resizeEvent
+  - #8:  download_erro emitido em _on_erro
+  - #9:  _url_download_direto removida (código morto)
+  - #10: _formatar_meta removida (código morto)
+  - thumbnail proporcional 16:9 (estilo Steam)
+  - addStretch no corpo para ancorar conteúdo no topo
+
 Chave de campos do dicionário real:
   name, version_remote, version_local, status, type,
   description, thumbnail_url, thumbnail_offset,
@@ -20,7 +29,7 @@ Chave de campos do dicionário real:
 
 from pathlib import Path
 
-from PySide6.QtCore    import Qt, QTimer, Signal
+from PySide6.QtCore    import Qt, QTimer, Signal, QSize
 from PySide6.QtGui     import QPixmap, QFont, QColor, QPainter, QLinearGradient
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -57,6 +66,7 @@ class GameCard(QWidget):
       download_iniciado(nome_jogo)
       download_concluido(nome_jogo)
       download_cancelado(nome_jogo)
+      download_erro(nome_jogo)
       progresso_download(nome_jogo, pct, fase, detalhe)
       desinstalado(nome_jogo)
     """
@@ -113,9 +123,8 @@ class GameCard(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Thumbnail — 320px estilo Steam
+        # Thumbnail proporcional 16:9 estilo Steam
         self._thumb = _ThumbnailLabel()
-        self._thumb.setFixedHeight(THUMB_ALTURA)
         layout.addWidget(self._thumb)
 
         # Corpo
@@ -233,7 +242,7 @@ class GameCard(QWidget):
         btn_row.addWidget(self._btn_desinstalar)
         cl.addLayout(btn_row)
 
-        # Container de metadados (divisor + grade) — oculto quando não instalado
+        # Container de metadados (divisor + grade)
         self._container_meta = QWidget()
         meta_cl = QVBoxLayout(self._container_meta)
         meta_cl.setContentsMargins(0, 10, 0, 0)
@@ -256,12 +265,12 @@ class GameCard(QWidget):
         meta_cl.addLayout(self._meta_row)
 
         cl.addWidget(self._container_meta)
+        cl.addStretch(1)  # espaço extra vai para o fim, âncora conteúdo no topo
 
         layout.addWidget(corpo)
 
         # Carregar thumbnail agora
         self._carregar_thumbnail()
-
 
     # ------------------------------------------------------------------
     # Estado
@@ -302,9 +311,9 @@ class GameCard(QWidget):
         size = self._dados.get("size_bytes", 0)
         self._meta_tamanho.set_valor(_fmt_tamanho(size) if size else "—")
 
-        status       = self.status
-        versao_r     = self._dados.get("version_remote", "")
-        versao_l     = self._dados.get("version_local",  "")
+        status   = self.status
+        versao_r = self._dados.get("version_remote", "")
+        versao_l = self._dados.get("version_local",  "")
         if status == "nao_instalado":
             self._meta_versao.setVisible(False)
         elif status == "desatualizado" and versao_l and versao_r:
@@ -329,14 +338,14 @@ class GameCard(QWidget):
             "jogando":   "Fechar Jogo",
         }
         self._btn_principal.setText(rotulos.get(acao, acao))
-        cor      = "#7a1a1a" if acao == "jogando" else COR_AZUL
-        cor_h    = "#a02020" if acao == "jogando" else COR_AZUL_CLARO
+        cor   = "#7a1a1a" if acao == "jogando" else COR_AZUL
+        cor_h = "#a02020" if acao == "jogando" else COR_AZUL_CLARO
         self._btn_principal.setStyleSheet(f"""
             QPushButton {{
                 background: {cor}; color: {COR_TEXTO}; border: none;
                 border-radius: 6px; padding: 0 16px;
             }}
-            QPushButton:hover   {{ background: {cor_h}; }}
+            QPushButton:hover    {{ background: {cor_h}; }}
             QPushButton:disabled {{ background: {COR_BORDA}; color: {COR_MUTED_DARK}; }}
         """)
 
@@ -424,16 +433,17 @@ class GameCard(QWidget):
         self._pix_original = pix
         offset_pct = self._dados.get("thumbnail_offset", 0.0)
         w = self._thumb.width() or 400
-        pix_crop = _aplicar_crop(pix, offset_pct, w, THUMB_ALTURA)
-        self._thumb.setPixmap(pix_crop)
+        h = self._thumb.height() or THUMB_ALTURA
+        self._thumb.setPixmap(_aplicar_crop(pix, offset_pct, w, h))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self._pix_original and not self._pix_original.isNull():
             offset_pct = self._dados.get("thumbnail_offset", 0.0)
             w = self._thumb.width() or 400
+            h = self._thumb.height() or THUMB_ALTURA
             self._thumb.setPixmap(
-                _aplicar_crop(self._pix_original, offset_pct, w, THUMB_ALTURA)
+                _aplicar_crop(self._pix_original, offset_pct, w, h)
             )
 
     # ------------------------------------------------------------------
@@ -629,7 +639,6 @@ class GameCard(QWidget):
         self._dados["status"]        = "atualizado"
         self._dados["version_local"] = versao
 
-        # Persiste no version_local.json
         try:
             from launcher.core.version_checker import carregar_versao_local, salvar_versao_local
             local = carregar_versao_local()
@@ -674,10 +683,9 @@ class GameCard(QWidget):
         self._lbl_fase.setStyleSheet("color: #c0392b;")
         self._lbl_detalhe.setText(msg[:120])
         self._barra.setVisible(False)
-        cor = COR_AZUL
         self._btn_principal.setStyleSheet(f"""
             QPushButton {{
-                background: {cor}; color: {COR_TEXTO}; border: none;
+                background: {COR_AZUL}; color: {COR_TEXTO}; border: none;
                 border-radius: 6px; padding: 0 16px;
             }}
             QPushButton:hover {{ background: {COR_AZUL_CLARO}; }}
@@ -711,14 +719,27 @@ class _MetaItem(QWidget):
 
 
 # ---------------------------------------------------------------------------
-# Thumbnail placeholder
+# Thumbnail proporcional 16:9 estilo Steam
 # ---------------------------------------------------------------------------
 
 class _ThumbnailLabel(QLabel):
+    _RAZAO = 16 / 9  # largura ÷ altura
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAlignment(Qt.AlignCenter)
         self.setStyleSheet(f"background: {COR_BANNER};")
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        return max(180, int(width / self._RAZAO))
+
+    def sizeHint(self) -> QSize:
+        w = self.width() or 400
+        return QSize(w, self.heightForWidth(w))
 
     def paintEvent(self, event):
         pix = self.pixmap()
@@ -728,7 +749,6 @@ class _ThumbnailLabel(QLabel):
             p.end()
             return
 
-        # Desenha a imagem manualmente e aplica gradiente no mesmo painter
         p = QPainter(self)
         p.drawPixmap(self.rect(), pix)
         grad = QLinearGradient(0, self.height() * 0.5, 0, self.height())
