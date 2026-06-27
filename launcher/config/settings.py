@@ -36,12 +36,18 @@ def obter_install_dir() -> str:
     return config.get("install_dir", DEFAULT_INSTALL_DIR)
 
 def obter_install_dir_jogo(nome_jogo: str) -> str:
-    """Retorna a pasta de instalação customizada de um jogo específico,
-    ou a pasta padrão se não houver customização."""
+    """Retorna o diretório BASE de instalação de um jogo específico
+    (sem a subpasta do jogo), ou a pasta padrão se não houver customização."""
     from launcher.core.version_checker import carregar_versao_local
     local = carregar_versao_local()
     custom = local.get(nome_jogo, {}).get("install_dir")
-    return custom if custom else obter_install_dir()
+    if not custom:
+        return obter_install_dir()
+    # Corrige entradas antigas que guardavam o caminho completo incluindo
+    # a subpasta do jogo (ex: C:\LDKLauncher\GameName em vez de C:\LDKLauncher).
+    if os.path.basename(custom) == nome_jogo:
+        return os.path.dirname(custom)
+    return custom
 
 def primeira_execucao() -> bool:
     """Retorna True se o launcher nunca foi configurado."""

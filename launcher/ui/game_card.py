@@ -629,7 +629,9 @@ class GameCard(QWidget):
                 local[nome] = {}
             local[nome]["version"] = versao
             if self._dados.get("pasta_instalacao"):
-                local[nome]["install_dir"] = self._dados["pasta_instalacao"]
+                # Salva apenas o diretório BASE (sem a subpasta do jogo),
+                # pois o worker sempre acrescenta self._nome sobre install_dir.
+                local[nome]["install_dir"] = str(Path(self._dados["pasta_instalacao"]).parent)
             salvar_versao_local(local)
         except Exception as e:
             logger.warning(f"[{nome}] Não foi possível salvar versão local: {e}")
