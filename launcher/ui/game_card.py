@@ -70,7 +70,8 @@ class GameCard(QWidget):
 
     def __init__(self, dados: dict, parent=None):
         super().__init__(parent)
-        self._dados   = dados
+        self._dados        = dados
+        self._pix_original: QPixmap | None = None
         self._worker: DownloadWorker | None = None
         self._jogando = False
         self._timer_jogo = QTimer(self)
@@ -419,6 +420,7 @@ class GameCard(QWidget):
     def _aplicar_pixmap(self, pix: QPixmap):
         if pix.isNull():
             return
+        self._pix_original = pix
         offset_pct = self._dados.get("thumbnail_offset", 0.0)
         w = self._thumb.width() or 400
         pix_crop = _aplicar_crop(pix, offset_pct, w, THUMB_ALTURA)
@@ -426,8 +428,12 @@ class GameCard(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if self._thumb.pixmap() and not self._thumb.pixmap().isNull():
-            self._aplicar_pixmap(self._thumb.pixmap())
+        if self._pix_original and not self._pix_original.isNull():
+            offset_pct = self._dados.get("thumbnail_offset", 0.0)
+            w = self._thumb.width() or 400
+            self._thumb.setPixmap(
+                _aplicar_crop(self._pix_original, offset_pct, w, THUMB_ALTURA)
+            )
 
     # ------------------------------------------------------------------
     # Ações
