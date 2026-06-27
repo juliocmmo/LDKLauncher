@@ -12,6 +12,11 @@ Mudanças em relação à Etapa 4:
 """
 
 import threading
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from launcher.ui.game_card import GameCard
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
@@ -27,8 +32,9 @@ class _Sinalizador(QObject):
     atualizar_texto    = Signal(str)
     ui_pronta          = Signal(list)
     erro_conexao       = Signal(str)
-    refresh_silencioso = Signal(list)   # auto-refresh e manual (após UI pronta)
-    toast              = Signal(str)    # mensagem rápida para o usuário
+    refresh_silencioso = Signal(list)
+    toast              = Signal(str)
+    notificacao        = Signal(str, str, str, bool)  # titulo, texto, icone_path, sucesso
 
 
 class _TitleBar(QWidget):
@@ -142,6 +148,7 @@ class MainWindow(QMainWindow):
         self._sig.erro_conexao.connect(self._loading.set_texto)
         self._sig.refresh_silencioso.connect(self._on_refresh_silencioso)
         self._sig.toast.connect(self._mostrar_toast)
+        self._sig.notificacao.connect(self._mostrar_notificacao)
 
         # Timer de auto-refresh a cada 5 minutos (inicia somente após UI pronta)
         self._timer_refresh = QTimer(self)
@@ -227,6 +234,17 @@ class MainWindow(QMainWindow):
             card._btn_principal.setEnabled(True)
             card._btn_desinstalar.setEnabled(True)
         self._sidebar.popular(self._jogos_remotos)
+
+        from launcher.config.settings import CONFIG_DIR
+        icone_png = Path(CONFIG_DIR) / "icons" / f"{nome}.png"
+        icone_jpg = Path(CONFIG_DIR) / "thumbs" / f"{nome}.jpg"
+        icone = str(icone_png) if icone_png.exists() else str(icone_jpg)
+        self._sig.notificacao.emit(
+            "Download concluído",
+            f"{nome} está pronto para jogar.",
+            icone,
+            True,
+        )
 
     def _on_download_cancelado(self, nome: str):
         self._sidebar.desmarcar_baixando(nome)
@@ -361,3 +379,15 @@ class MainWindow(QMainWindow):
         toast.raise_()
 
         QTimer.singleShot(3000, toast.deleteLater)
+
+    def _mostrar_notificacao(self, titulo: str, texto: str, icone_path: str, sucesso: bool):
+        """Popup estilo Steam no canto inferior direito da tela."""
+        from launcher.ui.notification_popup import NotificationPopup
+        popup = NotificationPopup(titulo, texto, icone_path, sucesso)
+        popup.show()
+        # Guarda referência para não ser coletado pelo GC
+        if not hasattr(self, "_popups"):
+            self._popups = []
+        self._popups.append(popup)
+        # Remove da lista quando fechar
+        popup.destroyed.connect(lambda: self._popups.remove(popup) if popup in self._popups else None)

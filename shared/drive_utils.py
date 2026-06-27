@@ -27,7 +27,10 @@ def _get_token() -> str:
 
     with _token_lock:
         agora = datetime.now(timezone.utc)
-        if _token_cache["token"] and _token_cache["expiry"] and agora < _token_cache["expiry"]:
+        expiry = _token_cache["expiry"]
+        if expiry and expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        if _token_cache["token"] and expiry and agora < expiry:
             return _token_cache["token"]
 
         try:
