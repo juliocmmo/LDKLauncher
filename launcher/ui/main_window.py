@@ -92,18 +92,15 @@ class _TitleBar(QWidget):
             f"QPushButton:hover {{ background-color: {hover_bg}; color: {hover_color}; }}"
         )
 
+    # Arrastar é controlado pelo Windows via HTCAPTION no nativeEvent.
+    # Os métodos de mouse não precisam mais mover a janela manualmente.
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint() - self.window().frameGeometry().topLeft()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.LeftButton and self._drag_pos is not None:
-            self.window().move(event.globalPosition().toPoint() - self._drag_pos)
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        self._drag_pos = None
         super().mouseReleaseEvent(event)
 
 
@@ -181,6 +178,52 @@ class MainWindow(QMainWindow):
         # NÃO chama _inicializar aqui — quem chama é o main.py
 
     # ------------------------------------------------------------------
+    # Estilos Win32 para Snap Assist
+    # ------------------------------------------------------------------
+
+    def _aplicar_estilos_win32(self):
+        """
+        Remove WS_POPUP (setado pelo Qt com FramelessWindowHint) e aplica
+        os flags de janela normal. O Windows Shell só habilita Snap Assist
+        para janelas não-popup com WS_THICKFRAME | WS_CAPTION.
+        A borda nativa é suprimida visualmente via WM_NCCALCSIZE.
+        """
+        import sys
+        if sys.platform != "win32":
+            return
+        import ctypes
+        GWL_STYLE      = -16
+        WS_POPUP       = 0x80000000
+        WS_THICKFRAME  = 0x00040000
+        WS_CAPTION     = 0x00C00000
+        WS_SYSMENU     = 0x00080000
+        WS_MINIMIZEBOX = 0x00020000
+        WS_MAXIMIZEBOX = 0x00010000
+
+        hwnd = int(self.winId())
+        estilo = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_STYLE)
+
+        # Remove WS_POPUP, adiciona flags de janela overlapped normal
+        novo = (estilo & 0xFFFFFFFF & ~WS_POPUP) | \
+               WS_THICKFRAME | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX
+        ctypes.windll.user32.SetWindowLongW(hwnd, GWL_STYLE, novo)
+
+        SWP_NOMOVE       = 0x0002
+        SWP_NOSIZE       = 0x0001
+        SWP_NOZORDER     = 0x0004
+        SWP_FRAMECHANGED = 0x0020
+        ctypes.windll.user32.SetWindowPos(
+            hwnd, None, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED
+        )
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Aplicar após a janela ser exibida garante que o DWM já registrou
+        # o HWND e os flags WS_THICKFRAME | WS_CAPTION têm efeito completo.
+        self._aplicar_estilos_win32()
+
+    # ------------------------------------------------------------------
     # Resize nativo por borda (Windows — WM_NCHITTEST)
     # ------------------------------------------------------------------
 
@@ -192,6 +235,13 @@ class MainWindow(QMainWindow):
 
         if eventType == b"windows_generic_MSG":
             msg = ctypes.cast(int(message), ctypes.POINTER(MSG)).contents
+
+            # Remove a borda nativa visualmente, mas mantém WS_THICKFRAME
+            # ativo para que Snap Assist e animações funcionem.
+            # wParam == 0: consulta simples → retorna 0 (sem borda)
+            # wParam == 1: cálculo de Snap/maximizar → deixa o Windows processar
+            if msg.message == 0x0083:  # WM_NCCALCSIZE
+                return True, 0
 
             if msg.message == 0x0084:  # WM_NCHITTEST
                 x = ctypes.c_short(msg.lParam & 0xFFFF).value
@@ -212,6 +262,17 @@ class MainWindow(QMainWindow):
                 if dir_:           return True, 11  # HTRIGHT
                 if topo:           return True, 12  # HTTOP
                 if baixo:          return True, 15  # HTBOTTOM
+
+                # Região da title bar: ativa arrastar nativo + Snap Assist
+                # Exceto sobre widgets clicáveis (botões), que devolvemos ao Qt.
+                barra_h = self._title_bar.height()
+                if y < geo.y() + barra_h:
+                    # Coordenada do cursor relativa à title bar
+                    cx = x - geo.x()
+                    cy = y - geo.y()
+                    if self._title_bar.childAt(cx, cy) is not None:
+                        return True, 1  # HTCLIENT — Qt processa o clique
+                    return True, 2  # HTCAPTION
 
         return super().nativeEvent(eventType, message)
 
