@@ -344,6 +344,7 @@ class GameCard(QWidget):
         self._btn_cancelar.setEnabled(True)
         self._btn_principal.setVisible(False)
         self._btn_desinstalar.setVisible(False)
+        self._barra.setVisible(True)
         self._barra.setValue(0)
         self._lbl_fase.setText("Iniciando…")
         self._lbl_detalhe.setText("")

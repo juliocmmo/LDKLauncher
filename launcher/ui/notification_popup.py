@@ -22,6 +22,9 @@ POPUP_H = 80
 MARGEM  = 16
 
 
+_efeitos_ativos: list = []   # mantém referência para o GC não coletar enquanto toca
+
+
 def _tocar_som():
     """Toca notification.wav com volume reduzido via QSoundEffect."""
     try:
@@ -30,10 +33,17 @@ def _tocar_som():
         base = Path(getattr(sys, "_MEIPASS", Path(__file__).parent.parent))
         wav  = base / "assets" / "notification.wav"
         if wav.exists():
-            _tocar_som._efeito = QSoundEffect()
-            _tocar_som._efeito.setSource(QUrl.fromLocalFile(str(wav)))
-            _tocar_som._efeito.setVolume(0.3)  # 0.0 a 1.0 — ajuste aqui
-            _tocar_som._efeito.play()
+            efeito = QSoundEffect()
+            efeito.setSource(QUrl.fromLocalFile(str(wav)))
+            efeito.setVolume(0.3)
+            # Remove da lista quando o playback terminar, evitando acúmulo
+            efeito.playingChanged.connect(
+                lambda: _efeitos_ativos.remove(efeito)
+                if not efeito.isPlaying() and efeito in _efeitos_ativos
+                else None
+            )
+            _efeitos_ativos.append(efeito)
+            efeito.play()
     except Exception:
         pass
 
