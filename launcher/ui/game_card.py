@@ -245,8 +245,10 @@ class GameCard(QWidget):
         self._meta_row = QHBoxLayout()
         self._meta_row.setSpacing(28)
         self._meta_tamanho = _MetaItem("Tamanho", "—")
+        self._meta_versao  = _MetaItem("Versão", "—")
         self._meta_jogado  = _MetaItem("Último acesso", "—")
         self._meta_row.addWidget(self._meta_tamanho)
+        self._meta_row.addWidget(self._meta_versao)
         self._meta_row.addWidget(self._meta_jogado)
         self._meta_row.addStretch()
         meta_cl.addLayout(self._meta_row)
@@ -297,6 +299,18 @@ class GameCard(QWidget):
         """Atualiza a grade de metadados abaixo do botão."""
         size = self._dados.get("size_bytes", 0)
         self._meta_tamanho.set_valor(_fmt_tamanho(size) if size else "—")
+
+        status       = self.status
+        versao_r     = self._dados.get("version_remote", "")
+        versao_l     = self._dados.get("version_local",  "")
+        if status == "nao_instalado":
+            self._meta_versao.setVisible(False)
+        elif status == "desatualizado" and versao_l and versao_r:
+            self._meta_versao.set_valor(f"v{versao_l} → v{versao_r}")
+            self._meta_versao.setVisible(True)
+        else:
+            self._meta_versao.set_valor(f"v{versao_r}" if versao_r else "—")
+            self._meta_versao.setVisible(True)
 
         last_played = self._dados.get("last_played", "")
         self._meta_jogado.set_valor(_fmt_data(last_played) if last_played else "—")

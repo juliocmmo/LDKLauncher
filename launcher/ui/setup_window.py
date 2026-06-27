@@ -9,12 +9,12 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QPixmap
 
-from ui.theme import (
+from launcher.ui.theme import (
     COR_BG, COR_SIDEBAR, COR_BORDA, COR_ITEM_ATIVO,
     COR_AZUL, COR_AZUL_CLARO, COR_TEXTO, COR_MUTED, COR_MUTED_DARK
 )
-from config.settings import DEFAULT_INSTALL_DIR, salvar_config, carregar_config
-from core.antivirus import esta_excluida, adicionar_exclusao
+from launcher.config.settings import DEFAULT_INSTALL_DIR, salvar_config, carregar_config
+from launcher.core.antivirus import esta_excluida, adicionar_exclusao
 
 
 class SetupWindow(QDialog):
@@ -258,6 +258,7 @@ class SetupWindow(QDialog):
             QCheckBox#checkAv::indicator:checked {{
                 background: {COR_AZUL};
                 border-color: {COR_AZUL};
+                image: url(launcher/assets/check.svg);
             }}
             QCheckBox#checkAv::indicator:hover {{
                 border-color: {COR_AZUL_CLARO};

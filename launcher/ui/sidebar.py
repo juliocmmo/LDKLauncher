@@ -107,10 +107,49 @@ class Sidebar(QWidget):
         scroll.setWidget(self._container)
         layout.addWidget(scroll, stretch=1)
 
-        # Rodapé mini-status
+        # Rodapé mini-status download (oculto enquanto não há download)
         self._rodape = _RodapeDownload()
         self._rodape.setVisible(False)
         layout.addWidget(self._rodape)
+
+        # Rodapé inline: versão + ↻ + ⚙
+        from launcher.config.settings import LAUNCHER_VERSION
+        _css_btn_fixo = f"""
+            QPushButton {{
+                background: transparent; color: {COR_MUTED};
+                border: none; font-size: 18px;
+            }}
+            QPushButton:hover {{
+                color: {COR_TEXTO};
+                background: {COR_ITEM_ATIVO};
+                border-radius: 6px;
+            }}
+        """
+        self._lbl_versao_fixo = QLabel(f"v{LAUNCHER_VERSION}")
+        self._lbl_versao_fixo.setFont(QFont("Segoe UI", 10))
+        self._lbl_versao_fixo.setStyleSheet(f"color: {COR_MUTED}; background: transparent; padding-left: 16px; padding-bottom: 8px;")
+
+        self._btn_sidebar_refresh = QPushButton("↻")
+        self._btn_sidebar_refresh.setFixedSize(34, 34)
+        self._btn_sidebar_refresh.setCursor(Qt.PointingHandCursor)
+        self._btn_sidebar_refresh.setToolTip("Atualizar lista de jogos")
+        self._btn_sidebar_refresh.setStyleSheet(_css_btn_fixo)
+
+        self._btn_sidebar_config = QPushButton("⚙")
+        self._btn_sidebar_config.setFixedSize(34, 34)
+        self._btn_sidebar_config.setCursor(Qt.PointingHandCursor)
+        self._btn_sidebar_config.setToolTip("Configurações")
+        self._btn_sidebar_config.setStyleSheet(_css_btn_fixo)
+        self._btn_sidebar_config.clicked.connect(self._abrir_config)
+
+        rodape_row = QHBoxLayout()
+        rodape_row.setContentsMargins(0, 0, 8, 8)
+        rodape_row.setSpacing(2)
+        rodape_row.addWidget(self._lbl_versao_fixo)
+        rodape_row.addStretch()
+        rodape_row.addWidget(self._btn_sidebar_refresh)
+        rodape_row.addWidget(self._btn_sidebar_config)
+        layout.addLayout(rodape_row)
 
     # ------------------------------------------------------------------
     # API pública
@@ -195,6 +234,14 @@ class Sidebar(QWidget):
         if nome in self._itens:
             self._itens[nome].set_ativo(True)
 
+    def _on_refresh_externo(self):
+        pass  # conexão feita em main_window.py via _rodape_fixo.btn_refresh
+
+    def _abrir_config(self):
+        from launcher.ui.setup_window import SetupWindow
+        dlg = SetupWindow(parent=self, callback_concluido=lambda: None)
+        dlg.exec()
+
 
 # ---------------------------------------------------------------------------
 # Barra de abas
@@ -268,6 +315,7 @@ class _ItemSidebar(QWidget):
         self._icone_pronto.connect(self._aplicar_icone_cache)
         self._carregar_icone(dados.get("icon_url", ""))
         layout.addWidget(self._lbl_icone)
+        self._aplicar_sigla_fallback()
 
         # Texto
         col = QVBoxLayout()
@@ -294,9 +342,10 @@ class _ItemSidebar(QWidget):
         if cache.exists():
             w, h = ICONE_SIDEBAR_TAMANHO
             pix = QPixmap(str(cache)).scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            self._lbl_icone.setPixmap(pix)
-        else:
-            self._baixar_icone_bg(url, cache)
+            if not pix.isNull():
+                self._lbl_icone.setPixmap(pix)
+                return
+        self._baixar_icone_bg(url, cache)
 
     def _baixar_icone_bg(self, url: str, cache):
         import threading, requests
@@ -317,6 +366,22 @@ class _ItemSidebar(QWidget):
             w, h = ICONE_SIDEBAR_TAMANHO
             pix = pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self._lbl_icone.setPixmap(pix)
+            self._lbl_icone.setText("")  # remove sigla se ícone carregou
+
+    def _aplicar_sigla_fallback(self):
+        """Exibe as iniciais do nome enquanto o ícone não carrega."""
+        if self._lbl_icone.pixmap() and not self._lbl_icone.pixmap().isNull():
+            return
+        palavras = self._nome.split()
+        sigla = (palavras[0][0] + palavras[1][0]).upper() if len(palavras) >= 2 else self._nome[:2].upper()
+        self._lbl_icone.setText(sigla)
+        self._lbl_icone.setStyleSheet(f"""
+            background: {COR_BORDA};
+            border-radius: 4px;
+            color: {COR_MUTED};
+            font-size: 14px;
+            font-weight: bold;
+        """)
 
     def atualizar_status(self, status: str):
         self._status = status
@@ -403,6 +468,57 @@ class _RodapeDownload(QFrame):
 # ---------------------------------------------------------------------------
 # Converte URL do Drive para download direto
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Rodapé fixo: versão + botões ↻ e ⚙
+# ---------------------------------------------------------------------------
+
+class _RodapeFixo(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(52)
+        self.setMinimumWidth(220)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setStyleSheet(f"border-top: 1px solid {COR_BORDA};")
+
+        from launcher.config.settings import LAUNCHER_VERSION
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 0, 12, 0)
+        layout.setSpacing(4)
+
+        lbl_ver = QLabel(f"v{LAUNCHER_VERSION}")
+        lbl_ver.setFont(QFont("Segoe UI", 10))
+        lbl_ver.setStyleSheet(f"color: {COR_MUTED};")
+        layout.addWidget(lbl_ver)
+
+        layout.addStretch()
+
+        _css_btn = f"""
+            QPushButton {{
+                background: transparent; color: {COR_MUTED};
+                border: none; font-size: 18px;
+            }}
+            QPushButton:hover {{
+                color: {COR_TEXTO};
+                background: {COR_ITEM_ATIVO};
+                border-radius: 6px;
+            }}
+        """
+
+        self.btn_refresh = QPushButton("↻")
+        self.btn_refresh.setFixedSize(34, 34)
+        self.btn_refresh.setCursor(Qt.PointingHandCursor)
+        self.btn_refresh.setToolTip("Atualizar lista de jogos")
+        self.btn_refresh.setStyleSheet(_css_btn)
+        layout.addWidget(self.btn_refresh)
+
+        self.btn_config = QPushButton("⚙")
+        self.btn_config.setFixedSize(34, 34)
+        self.btn_config.setCursor(Qt.PointingHandCursor)
+        self.btn_config.setToolTip("Configurações")
+        self.btn_config.setStyleSheet(_css_btn)
+        layout.addWidget(self.btn_config)
 
 def _url_download_direto(url: str) -> str:
     import re

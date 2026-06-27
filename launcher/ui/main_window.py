@@ -43,14 +43,6 @@ class _TitleBar(QWidget):
         layout.setSpacing(0)
         layout.addStretch()
 
-        # Botão de refresh manual
-        self._btn_refresh = QPushButton("↻")
-        self._btn_refresh.setFixedSize(32, 32)
-        self._btn_refresh.setCursor(Qt.PointingHandCursor)
-        self._btn_refresh.setToolTip("Atualizar lista de jogos")
-        self._btn_refresh.setStyleSheet(self._btn_css(COR_MUTED, COR_ITEM_ATIVO, COR_AZUL_CLARO))
-        layout.addWidget(self._btn_refresh)
-
         btn_min = QPushButton("−")
         btn_min.setFixedSize(32, 32)
         btn_min.setCursor(Qt.PointingHandCursor)
@@ -204,9 +196,9 @@ class MainWindow(QMainWindow):
 
         self._stack.setCurrentIndex(1)
 
-        # Iniciar timer de auto-refresh e conectar botão ↻ agora que a UI está pronta
+        # Iniciar timer de auto-refresh e conectar botão ↻ do rodapé da sidebar
         self._timer_refresh.start()
-        self._title_bar._btn_refresh.clicked.connect(self._on_refresh_manual)
+        self._sidebar._btn_sidebar_refresh.clicked.connect(self._on_refresh_manual)
 
     # ------------------------------------------------------------------
     # Navegação
