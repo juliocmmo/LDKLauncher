@@ -103,6 +103,10 @@ class _TitleBar(QWidget):
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
 
+    def cursor_sobre_btn_max(self, pos_local) -> bool:
+        """Retorna True se pos_local (relativa à title bar) está sobre o botão maximizar."""
+        return self._btn_max.geometry().contains(pos_local)
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -243,6 +247,14 @@ class MainWindow(QMainWindow):
             if msg.message == 0x0083:  # WM_NCCALCSIZE
                 return True, 0
 
+            if msg.message in (0x00A0, 0x0085):  # WM_NCMOUSEMOVE, WM_NCPAINT
+                return True, 0
+
+            if msg.message == 0x00A1:  # WM_NCLBUTTONDOWN
+                if msg.wParam == 9:   # HTMAXBUTTON — intercepta clique, suprime highlight branco
+                    self._title_bar._toggle_maximizar()
+                    return True, 0
+
             if msg.message == 0x0084:  # WM_NCHITTEST
                 x = ctypes.c_short(msg.lParam & 0xFFFF).value
                 y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
@@ -264,14 +276,17 @@ class MainWindow(QMainWindow):
                 if baixo:          return True, 15  # HTBOTTOM
 
                 # Região da title bar: ativa arrastar nativo + Snap Assist
-                # Exceto sobre widgets clicáveis (botões), que devolvemos ao Qt.
                 barra_h = self._title_bar.height()
                 if y < geo.y() + barra_h:
-                    # Coordenada do cursor relativa à title bar
+                    from PySide6.QtCore import QPoint
                     cx = x - geo.x()
                     cy = y - geo.y()
+                    # Hover sobre botão maximizar → Snap Layouts (Windows 11)
+                    if self._title_bar.cursor_sobre_btn_max(QPoint(cx, cy)):
+                        return True, 9  # HTMAXBUTTON
+                    # Outros botões → Qt processa o clique
                     if self._title_bar.childAt(cx, cy) is not None:
-                        return True, 1  # HTCLIENT — Qt processa o clique
+                        return True, 1  # HTCLIENT
                     return True, 2  # HTCAPTION
 
         return super().nativeEvent(eventType, message)
