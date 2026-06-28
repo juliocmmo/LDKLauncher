@@ -27,3 +27,6 @@ Thumbs.db
 # Artefatos de build — gerados pelo build.ps1
 LDKLauncher-Setup.exe
 LDKLauncher.zip
+
+# Contexto de sessões Claude
+CLAUDE.md
