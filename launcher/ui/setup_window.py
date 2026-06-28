@@ -166,11 +166,11 @@ class SetupWindow(QDialog):
 
         # ── Botão confirmar ──────────────────────────────────────────────────
         texto_btn = "Salvar configurações" if self._modo_config else "Confirmar e continuar"
-        btn_confirmar = QPushButton(texto_btn)
-        btn_confirmar.setObjectName("btnConfirmar")
-        btn_confirmar.setFixedHeight(40)
-        btn_confirmar.clicked.connect(self._confirmar)
-        corpo_layout.addWidget(btn_confirmar)
+        self._btn_confirmar_ref = QPushButton(texto_btn)
+        self._btn_confirmar_ref.setObjectName("btnConfirmar")
+        self._btn_confirmar_ref.setFixedHeight(40)
+        self._btn_confirmar_ref.clicked.connect(self._confirmar)
+        corpo_layout.addWidget(self._btn_confirmar_ref)
 
         corpo_layout.addStretch()
         root.addWidget(corpo, stretch=1)
@@ -288,11 +288,18 @@ class SetupWindow(QDialog):
 
         if self._check_av.isChecked() and not esta_excluida(self.pasta_escolhida):
             os.makedirs(self.pasta_escolhida, exist_ok=True)
-            threading.Thread(
+            self._btn_confirmar_ref.setEnabled(False)
+            self._btn_confirmar_ref.setText("Configurando antivírus...")
+            from PySide6.QtWidgets import QApplication
+            t = threading.Thread(
                 target=adicionar_exclusao,
                 args=(self.pasta_escolhida,),
                 daemon=True,
-            ).start()
+            )
+            t.start()
+            while t.is_alive():
+                QApplication.processEvents()
+                t.join(timeout=0.1)
 
         self.accept()
         self.callback_concluido()

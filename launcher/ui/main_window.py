@@ -341,6 +341,9 @@ class MainWindow(QMainWindow):
         self._timer_refresh.start()
         self._sidebar._btn_sidebar_refresh.clicked.connect(self._on_refresh_manual)
 
+        # Verificar update do launcher 15s após UI pronta (não bloqueia o startup)
+        QTimer.singleShot(15_000, self._verificar_update_launcher_bg)
+
     # ------------------------------------------------------------------
     # Navegação
     # ------------------------------------------------------------------
@@ -441,6 +444,28 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Refresh background (compartilhado entre auto e manual)
     # ------------------------------------------------------------------
+
+    def _verificar_update_launcher_bg(self):
+        """Verifica em background se há nova versão do launcher e notifica via popup."""
+        def _checar():
+            try:
+                from launcher.core.auto_updater import obter_versao_remota, _versao_tuple
+                from launcher.config.settings import LAUNCHER_VERSION
+                versao_remota = obter_versao_remota()
+                if not versao_remota:
+                    return
+                if _versao_tuple(versao_remota) > _versao_tuple(LAUNCHER_VERSION.lstrip("v")):
+                    self._sig.notificacao.emit(
+                        "Atualização disponível",
+                        f"Nova versão v{versao_remota} disponível. "
+                        f"Reinicie o launcher para atualizar.",
+                        "",
+                        True,
+                    )
+            except Exception:
+                pass
+
+        threading.Thread(target=_checar, daemon=True).start()
 
     def _refresh_bg(self):
         """Dispara busca remota em background. Usado pelo timer de 5 min."""

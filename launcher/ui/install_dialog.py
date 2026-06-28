@@ -194,9 +194,10 @@ class InstallDialog(QDialog):
         )
 
     def _precisa_antivirus(self) -> bool:
-        if self._pasta_e_padrao():
-            return False
-        return not esta_excluida(self.pasta_escolhida)
+        # Se for subpasta da pasta padrão, verifica a pasta BASE (não a subpasta do jogo)
+        # para não pedir UAC toda vez que instalar um jogo novo na pasta padrão.
+        pasta_a_checar = self.pasta_base if self._pasta_e_padrao() else self.pasta_escolhida
+        return not esta_excluida(pasta_a_checar)
 
     def _atualizar_av(self):
         mostrar = self._precisa_antivirus()

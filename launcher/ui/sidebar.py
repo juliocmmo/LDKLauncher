@@ -227,6 +227,9 @@ class Sidebar(QWidget):
             self._itens[nome] = item
             self._layout_lista.insertWidget(stretch_idx, item)
             stretch_idx += 1
+            # Restaura estado de download se este jogo estava baixando ao trocar de aba
+            if nome == self._nome_baixando:
+                item.set_baixando(True)
 
         if self._nome_ativo and self._nome_ativo in self._itens:
             self._destacar(self._nome_ativo)
@@ -237,8 +240,10 @@ class Sidebar(QWidget):
 
     def _filtrar(self) -> list[dict]:
         if self._aba_atual == "biblioteca":
-            return [j for j in self._jogos if j.get("status") != "nao_instalado"]
-        return [j for j in self._jogos if j.get("status") == "nao_instalado"]
+            jogos = [j for j in self._jogos if j.get("status") != "nao_instalado"]
+        else:
+            jogos = [j for j in self._jogos if j.get("status") == "nao_instalado"]
+        return sorted(jogos, key=lambda j: j["name"].lower())
 
     def _on_aba(self, aba: str):
         self._aba_atual = aba
@@ -321,8 +326,15 @@ class _ItemSidebar(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 0, 10, 0)
+        layout.setContentsMargins(0, 0, 10, 0)
         layout.setSpacing(10)
+
+        # Barra vertical de seleção (fica à esquerda, colorida quando ativo)
+        self._indicador = QFrame()
+        self._indicador.setFixedWidth(3)
+        self._indicador.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        self._indicador.setStyleSheet("background: transparent;")
+        layout.addWidget(self._indicador)
 
         # Ícone
         self._lbl_icone = QLabel()
@@ -442,18 +454,19 @@ class _ItemSidebar(QWidget):
 
     def _refresh_bg(self):
         if self._baixando:
-            bg     = COR_DOWNLOAD_ATIVO
-            borda  = "transparent"
+            bg        = COR_DOWNLOAD_ATIVO
+            cor_barra = "transparent"
         elif self._ativo:
-            bg     = COR_ITEM_ATIVO
-            borda  = COR_AZUL_CLARO
+            bg        = COR_ITEM_ATIVO
+            cor_barra = COR_AZUL_CLARO
         else:
-            bg     = "transparent"
-            borda  = "transparent"
+            bg        = "transparent"
+            cor_barra = "transparent"
+
+        self._indicador.setStyleSheet(f"background: {cor_barra}; border-radius: 2px;")
         self.setStyleSheet(f"""
             _ItemSidebar {{
                 background: {bg};
-                border-left: 3px solid {borda};
             }}
             _ItemSidebar:hover {{ background: {COR_ITEM_ATIVO}; }}
         """)

@@ -15,20 +15,41 @@ from core.auto_updater import verificar_atualizacao_launcher, baixar_e_aplicar_u
 
 
 def _garantir_exclusao_pasta_padrao():
+    """
+    Garante que a pasta de jogos e a pasta do próprio exe estejam
+    excluídas do Defender. A pasta do exe protege futuras atualizações
+    do launcher contra falsos positivos.
+    """
     try:
         from core.antivirus import esta_excluida, adicionar_exclusao
-        import threading
-        pasta = obter_install_dir()
-        if not esta_excluida(pasta):
-            logger.info(f"Pasta padrão não excluída do Defender. Adicionando: {pasta}")
-            os.makedirs(pasta, exist_ok=True)
+
+        pastas = []
+
+        # Pasta de instalação dos jogos
+        pasta_jogos = obter_install_dir()
+        os.makedirs(pasta_jogos, exist_ok=True)
+        if not esta_excluida(pasta_jogos):
+            logger.info(f"Adicionando exclusão do Defender (jogos): {pasta_jogos}")
+            pastas.append(pasta_jogos)
+        else:
+            logger.info("Pasta de jogos já está excluída do Defender.")
+
+        # Pasta do próprio exe (só quando empacotado pelo PyInstaller)
+        if getattr(sys, "frozen", False):
+            pasta_exe = os.path.dirname(sys.executable)
+            if not esta_excluida(pasta_exe):
+                logger.info(f"Adicionando exclusão do Defender (exe): {pasta_exe}")
+                pastas.append(pasta_exe)
+            else:
+                logger.info("Pasta do exe já está excluída do Defender.")
+
+        for pasta in pastas:
             threading.Thread(
                 target=adicionar_exclusao,
                 args=(pasta,),
                 daemon=True,
             ).start()
-        else:
-            logger.info("Pasta padrão já está excluída do Defender.")
+
     except Exception as e:
         logger.warning(f"Erro ao verificar exclusão do Defender: {e}")
 

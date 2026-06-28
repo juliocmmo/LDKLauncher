@@ -21,6 +21,7 @@ from PySide6.QtCore import QThread, Signal
 
 from launcher.core.downloader import baixar_arquivo
 from launcher.core.extractor  import extrair_modpack, extrair_instancia_minecraft
+from launcher.core.antivirus  import esta_excluida, adicionar_exclusao
 from launcher.config.settings import get_temp_dir
 from launcher.config.logger   import get_logger
 
@@ -94,6 +95,7 @@ class DownloadWorker(QThread):
                     self.cancelado.emit(self._nome)
                     return
 
+            self._garantir_exclusao_defender()
             self._fase_extracao()
             if self._cancel_event.is_set():
                 self._limpar_residuos(parcial=True)
@@ -115,6 +117,24 @@ class DownloadWorker(QThread):
     # ------------------------------------------------------------------
     # Fases
     # ------------------------------------------------------------------
+
+    def _garantir_exclusao_defender(self):
+        """
+        Adiciona a pasta de instalação às exclusões do Windows Defender
+        antes da extração. Se já estiver excluída (registro local), não faz nada.
+        Falha silenciosa — apenas loga; não bloqueia a instalação.
+        """
+        pasta = str(self._install_dir)
+        if esta_excluida(pasta):
+            logger.info(f"[{self._nome}] Pasta já excluída do Defender: {pasta}")
+            return
+        logger.info(f"[{self._nome}] Adicionando exclusão do Defender antes da extração…")
+        ok = adicionar_exclusao(pasta)
+        if not ok:
+            logger.warning(
+                f"[{self._nome}] Não foi possível excluir pasta do Defender. "
+                f"O antivírus pode barrar arquivos durante a extração."
+            )
 
     def _fase_download(self):
         import time

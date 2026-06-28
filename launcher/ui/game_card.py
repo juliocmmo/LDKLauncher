@@ -71,13 +71,14 @@ class GameCard(QWidget):
       desinstalado(nome_jogo)
     """
 
-    download_iniciado  = Signal(str)
-    download_concluido = Signal(str)
-    download_cancelado = Signal(str)
-    download_erro      = Signal(str)
-    progresso_download = Signal(str, int, str, str)
-    desinstalado       = Signal(str)
-    _thumb_pronta      = Signal(str)   # caminho do cache — uso interno
+    download_iniciado       = Signal(str)
+    download_concluido      = Signal(str)
+    download_cancelado      = Signal(str)
+    download_erro           = Signal(str)
+    progresso_download      = Signal(str, int, str, str)
+    desinstalado            = Signal(str)
+    _thumb_pronta           = Signal(str)   # caminho do cache — uso interno
+    _desinstalacao_concluida = Signal(bool, str)  # sucesso, erro — uso interno
 
     def __init__(self, dados: dict, parent=None):
         super().__init__(parent)
@@ -89,6 +90,7 @@ class GameCard(QWidget):
         self._timer_jogo.setInterval(2000)
         self._timer_jogo.timeout.connect(self._checar_processo_jogo)
         self._thumb_pronta.connect(self._aplicar_thumbnail_cache)
+        self._desinstalacao_concluida.connect(self._on_desinstalacao_concluida)
 
         self._construir_ui()
         self._atualizar_estado()
@@ -591,22 +593,44 @@ class GameCard(QWidget):
         self._executar_desinstalacao()
 
     def _executar_desinstalacao(self):
-        import shutil
-        from launcher.core.version_checker import carregar_versao_local, salvar_versao_local
-
         pasta = Path(obter_install_dir_jogo(self.nome)) / self.nome
-        try:
-            if pasta.exists():
-                shutil.rmtree(pasta)
-                logger.info(f"[{self.nome}] Pasta removida: {pasta}")
-            else:
-                logger.warning(f"[{self.nome}] Pasta não encontrada: {pasta}")
-        except Exception as e:
-            logger.error(f"[{self.nome}] Erro ao remover pasta: {e}")
-            self._mostrar_erro(f"Não foi possível remover a pasta:\n{e}")
+
+        # Mostra barra de progresso indeterminada enquanto remove
+        self._btn_desinstalar.setVisible(False)
+        self._btn_principal.setVisible(False)
+        self._area_prog.setVisible(True)
+        self._barra.setVisible(True)
+        self._barra.setRange(0, 0)  # indeterminado — spinner
+        self._lbl_fase.setText("Desinstalando…")
+        self._lbl_fase.setStyleSheet(f"color: {COR_MUTED};")
+        self._lbl_detalhe.setText(f"Removendo arquivos de {self.nome}…")
+
+        import threading
+        def _remover():
+            try:
+                if pasta.exists():
+                    import shutil
+                    shutil.rmtree(pasta)
+                    logger.info(f"[{self.nome}] Pasta removida: {pasta}")
+                else:
+                    logger.warning(f"[{self.nome}] Pasta não encontrada: {pasta}")
+                self._desinstalacao_concluida.emit(True, "")
+            except Exception as e:
+                logger.error(f"[{self.nome}] Erro ao remover pasta: {e}")
+                self._desinstalacao_concluida.emit(False, str(e))
+
+        threading.Thread(target=_remover, daemon=True).start()
+
+    def _on_desinstalacao_concluida(self, sucesso: bool, erro: str):
+        self._barra.setRange(0, 100)  # restaura modo determinado
+
+        if not sucesso:
+            self._mostrar_erro(f"Não foi possível remover a pasta:\n{erro}")
+            self._btn_principal.setVisible(True)
             return
 
         try:
+            from launcher.core.version_checker import carregar_versao_local, salvar_versao_local
             local = carregar_versao_local()
             if self.nome in local:
                 del local[self.nome]

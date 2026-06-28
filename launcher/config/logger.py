@@ -5,11 +5,13 @@ from logging.handlers import RotatingFileHandler
 
 
 def _get_log_dir() -> str:
-    """Retorna a pasta de logs — junto ao exe em produção, ou raiz do projeto em dev."""
+    """Retorna a pasta de logs — %LOCALAPPDATA%\LDKLauncher\logs em produção, raiz do projeto em dev."""
     if getattr(sys, 'frozen', False):
-        # Modo compilado: pasta do exe (ex: C:\LDKLauncher\logs)
-        exe_dir = os.path.dirname(sys.executable)
-        return os.path.join(exe_dir, "logs")
+        # Modo compilado: sempre em %LOCALAPPDATA%\LDKLauncher\logs
+        # Garante permissão de escrita independente de onde o exe está instalado
+        # (Program Files, localappdata, etc.)
+        local_app_data = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+        return os.path.join(local_app_data, "LDKLauncher", "logs")
     else:
         # Modo dev: pasta raiz do projeto
         return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")

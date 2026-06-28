@@ -23,3 +23,7 @@ venv/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Artefatos de build — gerados pelo build.ps1
+LDKLauncher-Setup.exe
+LDKLauncher.zip

@@ -53,6 +53,17 @@ def verificar_atualizacao_launcher() -> bool:
         return False
 
 
+def obter_versao_remota() -> str | None:
+    """Retorna a tag da versão mais recente no GitHub, ou None se falhar."""
+    try:
+        resposta = requests.get(GITHUB_API_URL, timeout=CONNECTION_TIMEOUT)
+        resposta.raise_for_status()
+        tag = resposta.json().get("tag_name", "").lstrip("v")
+        return tag or None
+    except Exception:
+        return None
+
+
 def baixar_e_aplicar_update(callback_status=None) -> bool:
     def _status(texto: str):
         if callback_status:
@@ -117,6 +128,12 @@ def baixar_e_aplicar_update(callback_status=None) -> bool:
 
         bat_conteudo = (
             "@echo off\r\n"
+            # Auto-elevação: se não for admin, re-executa elevado via UAC
+            "net session >nul 2>&1\r\n"
+            "if %errorlevel% neq 0 (\r\n"
+            '    powershell -Command "Start-Process \'%~f0\' -Verb RunAs"\r\n'
+            "    exit /b\r\n"
+            ")\r\n"
             f'set "LAUNCHER_EXE={launcher_exe}"\r\n'
             f'set "LAUNCHER_DIR={launcher_dir}"\r\n'
             f'set "NOVA_PASTA={nova_pasta}"\r\n'

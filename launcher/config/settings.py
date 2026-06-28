@@ -3,7 +3,7 @@ import json
 
 # ─── Informações do Launcher ───────────────────────────────────────────────────
 LAUNCHER_NAME    = "LDKLauncher"
-LAUNCHER_VERSION = "1.2.3"
+LAUNCHER_VERSION = "1.3.0"
 
 # ─── Pasta fixa para configurações do launcher ─────────────────────────────────
 CONFIG_DIR  = os.path.join(os.environ["LOCALAPPDATA"], LAUNCHER_NAME)
